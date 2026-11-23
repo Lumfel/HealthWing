@@ -1,0 +1,172 @@
+/* General Reset and Font */
+/* @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');  -- disabled for offline use; falls back to system sans-serif */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+/* Body and Layout */
+body {
+    background: linear-gradient(to right, #89CBDF, #DBE48C);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Containers */
+.login-container {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 30px 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Headings */
+.login-box h2 {
+    color: #89CBDF;
+    margin-bottom: 20px;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* Forms */
+form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+form label {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+    text-align: left;
+}
+form input,
+form select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 15px;
+    transition: border-color 0.2s;
+}
+input:focus, select:focus {
+    border-color: #89CBDF;
+    outline: none;
+}
+
+/* Buttons */
+.login-btn, .button, #submitCode {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1.125rem;
+    font-weight: bold;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background 0.3s;
+    margin-top: 10px;
+}
+.login-btn {
+    background: linear-gradient(to right, rgba(218, 74, 107, 0.85), rgba(255, 224, 35, 0.85));
+}
+.login-btn:hover {
+    background: linear-gradient(to right, rgba(218, 74, 107, 1), rgba(255, 224, 35, 1));
+}
+.button {
+    background: linear-gradient(to right, #ec4899, #fbbf24);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.button:hover {
+    background: linear-gradient(to right, #db2777, #f59e0b);
+}
+#submitCode {
+    background: linear-gradient(to right, #7c3aed, #9333ea);
+}
+#submitCode:hover {
+    background: linear-gradient(to right, #6d28d9, #7e22ce);
+}
+
+/* Register Text */
+.register-text {
+    margin-top: 20px;
+    font-size: 14px;
+    text-align: center;
+    color: #555;
+}
+.register-text a {
+    color: #DA4A6B;
+    text-decoration: none;
+    font-weight: 500;
+}
+.register-text a:hover {
+    text-decoration: underline;
+}
+
+/* Modal Overlay and Content */
+.hidden {
+    display: none !important;
+}
+#vetModal, #roleModal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.15); /* More transparent overlay */
+    z-index: 50;
+}
+#vetModal .bg-gray-800 {
+    position: relative;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+#roleModal.flex {
+    display: flex;
+}
+body.modal-open {
+    overflow: hidden;
+}
+
+/* Modal Close Button */
+#closeModal {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-size: 1.5rem;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+#closeModal:hover {
+    color: #ffffff;
+}
+
+/* Modal Input Field */
+#vetCode {
+    background-color: #1f2937;
+    color: #ffffff;
+    border: 1px solid #4b5563;
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+#vetCode:focus {
+    border-color: #6366f1;
+}

@@ -1,0 +1,429 @@
+/**
+ * HealthWing / VetSystem — Bone Loading & Mobile-First Responsive System (bone-loader.css)
+ *
+ * Provides:
+ * 1. Skeleton "Bone"Shimmer Placeholders (.hw-bone, .hw-bone-shape, .hw-bone-card)
+ * 2. Animated SVG Dog-Bone Spinner & Overlay (#hwBoneOverlay, #hwTopBoneBar)
+ * 3. Comprehensive Mobile Responsiveness (< 768px) for both User (Pet Owner) and Veterinarian portals:
+ *    - Collapsible mobile top menu + sticky 1-thumb Mobile Bottom Navigation Dock (.hw-mobile-bottom-dock)
+ *    - Mobile card-stack layout for wide tables (.data-table)
+ *    - Responsive 2-column calendar grid on phones (.cal-grid)
+ *    - Full-screen mobile-friendly Chat Drawer (#hwChatDrawer) and Video Call Modal (#hwCallModal)
+ */
+
+:root {
+    --hw-bone-base: #E4EEF0;
+    --hw-bone-highlight: #F5FAFB;
+    --hw-bone-accent: #4A9DBB;
+    --hw-bone-dark: #1F3A3D;
+}
+
+/* ---------- 1. Shimmering Skeleton "Bone"Primitives ---------- */
+@keyframes hwBoneShimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes hwBoneSpin {
+    0% { transform: rotate(0deg) scale(0.96); }
+    50% { transform: rotate(180deg) scale(1.06); }
+    100% { transform: rotate(360deg) scale(0.96); }
+}
+
+@keyframes hwBoneRock {
+    0%, 100% { transform: rotate(-14deg) translateY(0px); }
+    50% { transform: rotate(14deg) translateY(-4px); }
+}
+
+.hw-bone {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+        90deg,
+        var(--hw-bone-base) 25%,
+        var(--hw-bone-highlight) 50%,
+        var(--hw-bone-base) 75%
+    );
+    background-size: 200% 100%;
+    animation: hwBoneShimmer 1.45s infinite ease-in-out;
+    border-radius: 8px;
+    min-height: 14px;
+}
+
+.hw-bone-shape {
+    position: relative;
+    height: 14px;
+    border-radius: 999px;
+    margin: 4px 6px;
+}
+.hw-bone-shape::before,
+.hw-bone-shape::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    width: 14px;
+    height: 20px;
+    border-radius: 50%;
+    background: inherit;
+}
+.hw-bone-shape::before { left: -4px; }
+.hw-bone-shape::after { right: -4px; }
+
+.hw-bone-sm { height: 11px; border-radius: 6px; }
+.hw-bone-md { height: 16px; border-radius: 8px; }
+.hw-bone-lg { height: 24px; border-radius: 10px; }
+.hw-bone-xl { height: 38px; border-radius: 12px; }
+.hw-bone-circle { border-radius: 50%; }
+.hw-bone-pill { height: 24px; width: 88px; border-radius: 999px; display: inline-block; }
+
+.hw-bone-card {
+    background: #FFFFFF;
+    border: 1px solid #E3EBEC;
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.hw-bone-photo {
+    width: 100%;
+    height: 170px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ---------- 2. Animated SVG Dog-Bone Spinner & Overlay ---------- */
+.hw-bone-inline-loader {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--hw-bone-dark);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #EEF7F9;
+    border: 1px solid #B5DCE8;
+}
+
+.hw-bone-svg-spin {
+    width: 24px;
+    height: 24px;
+    animation: hwBoneSpin 1.35s infinite cubic-bezier(0.45, 0.05, 0.55, 0.95);
+    transform-origin: center;
+    flex-shrink: 0;
+}
+
+.hw-bone-svg-rock {
+    width: 28px;
+    height: 28px;
+    animation: hwBoneRock 0.9s infinite ease-in-out;
+    transform-origin: center;
+    flex-shrink: 0;
+}
+
+#hwBoneOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(244, 249, 250, 0.92);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    transition: opacity 0.28s ease, visibility 0.28s ease;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+#hwBoneOverlay.hw-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.hw-bone-loader-card {
+    background: #FFFFFF;
+    border: 1px solid #D5E3E6;
+    border-radius: 18px;
+    padding: 24px 32px;
+    box-shadow: 0 18px 48px rgba(15, 35, 42, 0.14);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    max-width: 90vw;
+}
+
+.hw-bone-loader-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #16262A;
+    margin: 0;
+}
+
+.hw-bone-loader-sub {
+    font-size: 12px;
+    color: #62787B;
+    margin: 0;
+}
+
+.hw-bone-progress-track {
+    width: 180px;
+    height: 6px;
+    background: #E4EEF0;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+
+.hw-bone-progress-bar {
+    width: 55%;
+    height: 100%;
+    background: linear-gradient(90deg, #1F3A3D, #4A9DBB, #DBE48C);
+    border-radius: 999px;
+    animation: hwBoneShimmer 1.1s infinite linear;
+    background-size: 200% 100%;
+}
+
+#hwTopBoneBar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 100001;
+    background: linear-gradient(90deg, #4A9DBB, #DBE48C, #D8546F, #4A9DBB);
+    background-size: 200% 100%;
+    animation: hwBoneShimmer 1s infinite linear;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+#hwTopBoneBar.active { opacity: 1; }
+
+/* ---------- 3. Mobile Responsiveness (User & Vet Portals) ---------- */
+.hw-mobile-bottom-dock {
+    display: none;
+}
+
+@media (max-width: 767px) {
+    body {
+        padding-bottom: 74px !important;
+    }
+
+    /* Compact Mobile Header & Hamburger Drawer */
+    .hw-brand-bar {
+        width: 100% !important;
+    }
+    .hw-mobile-only-btn {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+    .hw-collapsible-nav {
+        display: none !important;
+        width: 100% !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .hw-collapsible-nav.hw-nav-open {
+        display: flex !important;
+    }
+    .hw-collapsible-nav nav {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        gap: 4px !important;
+    }
+    .hw-collapsible-nav nav a {
+        display: block !important;
+        width: 100% !important;
+        padding: 10px 14px !important;
+    }
+    .hw-user-strip {
+        width: 100% !important;
+        justify-content: space-between !important;
+        padding-top: 8px;
+    }
+
+    /* Sticky 1-Thumb Mobile Bottom Navigation Dock */
+    .hw-mobile-bottom-dock {
+        display: grid !important;
+        grid-template-columns: repeat(5, 1fr);
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 62px;
+        background: #1F3A3D;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        z-index: 9998;
+        box-shadow: 0 -6px 24px rgba(15, 35, 42, 0.22);
+        font-family: system-ui, -apple-system, sans-serif;
+    }
+    .hw-dock-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        color: #B8E1EC;
+        text-decoration: none;
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 4px 2px;
+    }
+    .hw-dock-item.active {
+        color: #FFFFFF;
+        background: rgba(255, 255, 255, 0.14);
+        box-shadow: inset 0 3px 0 #DBE48C;
+    }
+    .hw-dock-icon {
+        font-size: 16px;
+        line-height: 1.1;
+    }
+
+    /* Shift floating chat launcher above the mobile bottom dock */
+    #hwChatLauncher {
+        bottom: 72px !important;
+        right: 12px !important;
+        padding: 10px 15px !important;
+        font-size: 12px !important;
+    }
+    #hwChatDrawer {
+        bottom: 64px !important;
+        right: 2vw !important;
+        left: 2vw !important;
+        width: 96vw !important;
+        height: 74vh !important;
+    }
+
+    /* Mobile Card-Stack Adaptation for Wide Clinical & Booking Tables */
+    .vet-wrap, .owner-wrap, .cal-container, .book-wrap {
+        padding: 0 12px !important;
+        margin-top: 14px !important;
+    }
+    .tab-bar {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px !important;
+    }
+    .tab-btn {
+        width: 100%;
+        text-align: center;
+        padding: 9px 10px !important;
+        font-size: 12px !important;
+    }
+    table.data-table thead {
+        display: none;
+    }
+    table.data-table,
+    table.data-table tbody,
+    table.data-table tr,
+    table.data-table td {
+        display: block;
+        width: 100% !important;
+    }
+    table.data-table tr {
+        background: #FFFFFF;
+        border: 1px solid #D5E3E6;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        box-shadow: 0 2px 8px rgba(15, 35, 42, 0.04);
+    }
+    table.data-table td {
+        border: none !important;
+        padding: 5px 0 !important;
+        max-width: 100% !important;
+    }
+
+    /* Responsive 2-Column Calendar Grid on Mobile Phones */
+    .cal-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .cal-day-header {
+        display: none;
+    }
+    .cal-cell.other-month {
+        display: none;
+    }
+}
+
+/* ---------- 4. HONOR X9c 5G Dedicated Responsive Profile (408x900 CSS px, 1224x2700 physical @ 3x DPR, 6.78"19.85:9 Curved AMOLED) ---------- */
+@media screen and (max-width: 416px) {
+    body {
+        /* 14px horizontal safe-area inset prevents text/buttons from clipping into the 6.78"curved AMOLED edges */
+        padding-left: max(12px, env(safe-area-inset-left, 12px)) !important;
+        padding-right: max(12px, env(safe-area-inset-right, 12px)) !important;
+        padding-bottom: 76px !important;
+    }
+    .vet-wrap, .owner-wrap, .cal-container, .book-wrap {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+        max-width: 408px !important;
+    }
+    .panel, .pet-card, .room-card, .case-card {
+        border-radius: 16px !important;
+        padding: 12px 14px !important;
+    }
+    .hw-mobile-bottom-dock {
+        height: 64px !important;
+        padding-bottom: env(safe-area-inset-bottom, 4px);
+    }
+    #hwChatDrawer {
+        width: 94vw !important;
+        left: 3vw !important;
+        right: 3vw !important;
+        max-height: 76vh !important;
+        border-radius: 20px !important;
+    }
+}
+
+/* ---------- 5. Slow Fade-In & Fade-Out Effect for Cards ---------- */
+@keyframes hwCardSlowFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(12px) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.panel,
+.pet-card,
+.room-card,
+.case-card,
+.cal-cell,
+.room-pill,
+.hw-bone-card,
+.stat,
+table.data-table tr {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    animation: hwCardSlowFadeIn 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: opacity 0.85s cubic-bezier(0.22, 1, 0.36, 1), transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+}
+
+.hw-card-fade-out {
+    opacity: 0 !important;
+    transform: translateY(10px) scale(0.985) !important;
+    transition: opacity 0.75s cubic-bezier(0.4, 0, 0.2, 1), transform 0.75s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.hw-card-fade-in {
+    opacity: 1 !important;
+    transform: translateY(0) scale(1) !important;
+}

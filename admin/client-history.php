@@ -1,0 +1,179 @@
+<?php
+$ADMIN_GUARD_IS_API = false;
+require_once __DIR__ . '/auth_guard.php';
+$admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', ENT_QUOTES);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <base href="/admin/">
+    <meta charset="UTF-8">
+    <meta name="viewport" content=" width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="dashboard.css">
+    <title>Client History · HealthWing Admin</title>
+    <link rel="stylesheet" href="../bone-loader.css">
+    <script src="../bone-loader.js"defer></script>
+</head>
+<body class="admin-body">
+    <button id="toggleDashboard1"></button>
+
+    <aside class="side" id="dashboard">
+        <div class="brand">
+            <img src="../images/logo.png" width="26" height="26" alt="HealthWing logo" style="border-radius: 6px;"/>
+            <div class="brand-text">
+                <strong>HealthWing</strong>
+                <span>Admin panel</span>
+            </div>
+        </div>
+
+        <nav>
+            <a href="ADMIN_VET_1.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+                Overview
+            </a>
+            <a href="CRUD.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.4 3-5.3 5.5-5.3s4.8 1.9 5.5 5.3"/><circle cx="17.5" cy="8.5" r="2.4"/><path d="M15.5 14.3c2.2.3 3.9 2 4.5 5"/></svg>
+                Manage Users
+            </a>
+            <a href="appointment-report.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg>
+                Appointment Summary
+            </a>
+            <a href="Schedule-Management.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+                Schedule Management
+            </a>
+            <a href="service-utilization.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+                Service Utilization
+            </a>
+            <a href="client-activity.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.5 17.5 9 11l4 3 7.5-8.5"/><path d="M15.5 5.5H20.5V10.5"/></svg>
+                Client Activity
+            </a>
+            <a href="ratings-report.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.4l-5.1 2.8 1-5.7-4.1-4 5.7-.8Z" stroke-linejoin="round"/></svg>
+                Ratings Report
+            </a>
+            <a href="room-management.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M15 12v.01"/></svg>
+                Room Management
+            </a>
+            <a href="emergency-cases.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 3 8.5v7L12 21l9-5.5v-7Z" stroke-linejoin="round"/><path d="M12 8v5M12 15.5v.1"/></svg>
+                Emergency Requests
+            </a>
+            <a href="pet-records.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 20.5c0-3 2.5-5 5-5h5c2.5 0 5 2 5 5"/><circle cx="7" cy="6.5" r="2"/><circle cx="12" cy="4.5" r="2"/><circle cx="17" cy="6.5" r="2"/><circle cx="12" cy="10.5" r="2.2"/></svg>
+                Pet Records
+            </a>
+            <a href="network-monitor.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="2"/><path d="M4.5 19.5c0-1.5 3-2.5 7.5-2.5s7.5 1 7.5 2.5"/><path d="M6 12a6 6 0 0112 0M3.5 8.5a10 10 0 0117 0"/></svg>
+                Network Monitor
+            </a>
+            <a href="client-history.php" class="current">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="8.5"/></svg>
+                Client History
+            </a>
+        </nav>
+
+        <div class="exit-row">
+            <div style="font-size:11.5px; color:#9FBEC0; padding: 0 4px 8px 4px;">Signed in as <strong style="color:#E4EDEC;"><?php echo $admin_display_name; ?></strong></div>
+            <button class="exit-btn" onclick="window.location.href='../index.php'">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H5a2 2 0 00-2 2v10a2 2 0 002 2h4M16 15l4-4-4-4M20 11H9"/></svg>
+                View Site
+            </button>
+            <button class="exit-btn" style="margin-top:6px;" onclick="window.location.href='admin_logout.php'">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <div class="main" id="mainArea">
+        <div class="page-head">
+            <div>
+                <h1>Client & Pet History</h1>
+                <p>Every checkup and emergency across all clients and their pets, in one timeline</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <input type="text" id="searchInput" placeholder="Search by client, pet, or vet...">
+            <select id="typeFilter">
+                <option value="">All Types</option>
+                <option value="Checkup">Checkups</option>
+                <option value="Emergency">Emergencies</option>
+            </select>
+        </div>
+
+        <div class="panel">
+            <div style="overflow-x:auto;">
+                <table class="data-table" id="historyTable">
+                    <thead>
+                        <tr><th>Type</th><th>Client</th><th>Pet</th><th>Vet</th><th>Date</th><th>Details</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const toggleButton = document.getElementById("toggleDashboard1");
+        const dashboard = document.getElementById("dashboard");
+        const mainArea = document.getElementById("mainArea");
+        toggleButton.addEventListener("click", () =>{
+            dashboard.classList.toggle("collapsed");
+            mainArea.classList.toggle("expanded");
+        });
+    })();
+
+    let allHistory = [];
+
+    function typeBadge(type) {
+        return type === 'Emergency'
+            ? '<span class="badge badge-bad">Emergency</span>'
+            : '<span class="badge badge-good">Checkup</span>';
+    }
+
+    function render() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const typeFilter = document.getElementById('typeFilter').value;
+        const filtered = allHistory.filter(h =>{
+            const matchesType = !typeFilter || h.Type === typeFilter;
+            const haystack = `${h.OwnerFirst} ${h.OwnerLast} ${h.PetName} ${h.VetName}`.toLowerCase();
+            const matchesSearch = !search || haystack.includes(search);
+            return matchesType && matchesSearch;
+        });
+
+        const tbody = document.querySelector('#historyTable tbody');
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="empty">No matching history.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = filtered.map(h =>`
+            <tr>
+                <td>${typeBadge(h.Type)}</td>
+                <td>${h.OwnerFirst || ''} ${h.OwnerLast || ''}</td>
+                <td>${h.PetName}</td>
+                <td>${h.VetName}</td>
+                <td>${h.EventDate}</td>
+                <td>${h.Details || '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    fetch('get_client_history.php')
+        .then(res => res.json())
+        .then(data =>{
+            allHistory = data.success ? data.history : [];
+            render();
+        });
+
+    document.getElementById('searchInput').addEventListener('input', render);
+    document.getElementById('typeFilter').addEventListener('change', render);
+    </script>
+</body>
+</html>

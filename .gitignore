@@ -1,0 +1,19 @@
+# Runtime secrets, encryption keys, sessions, and rate-limit state
+rate_limit_data/
+*.gcm
+*.gcm.json
+.hw_master_key
+*.key
+
+# Runtime caches and private archives
+admin/cache_dashboard_data.json
+archives/owner_receipts/
+
+# Environment & dependencies
+.env
+.env.*
+node_modules/
+
+# OS metadata
+.DS_Store
+Thumbs.db
