@@ -45,7 +45,7 @@ function show_guest_notice(string $message = "You need to sign in to view this p
             </div>
             <h1>Sign in required</h1>
             <p><?php echo htmlspecialchars($message); ?></p>
-            <a href="/Sign%20in%20html.html">Go to Sign In</a>
+            <a href="/login.php">Go to Sign In</a>
         </div>
     </body>
     </html>

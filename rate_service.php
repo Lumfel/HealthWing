@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/includes/security_crypto.php';
+require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 require_once __DIR__ . '/guest_notice.php';
 
@@ -8,9 +8,11 @@ if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
     exit();
 }
 
-$conn = new mysqli('localhost', 'root', '', 'veterinarydb');
-if ($conn->connect_error) {
-    die('Connection failed: '. $conn->connect_error);
+try {
+    $conn = hw_get_db();
+} catch (Throwable $e) {
+    show_guest_notice("Database connection failed. Please try again shortly.");
+    exit();
 }
 
 $stmt = $conn->prepare('SELECT Owner_ID FROM owner WHERE username = ?');
@@ -55,10 +57,12 @@ if (!empty($appointment['Rating_ID'])) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8">
-    <meta name="viewport" content=" width=device-width, initial-scale=1.0">
-    <title>Rate Your Visit · HealthWing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="hw-csrf-token" content="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+    <title>Rate Your Visit | HealthWing</title>
+    <link rel="stylesheet" href="api/asset_proxy.php?f=assets/css/loader.css">
+    <script src="api/asset_proxy.php?f=assets/js/loader.js" defer></script>
     <style>
         body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F6FAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
         .rate-card { background: #fff; border-radius: 16px; padding: 32px; max-width: 420px; width: 90%; box-shadow: 0 12px 36px rgba(0,0,0,0.1); border: 1px solid #E3EBEC; }

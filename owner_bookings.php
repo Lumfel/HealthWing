@@ -1,6 +1,6 @@
 <?php
 /**
- * HealthWing / VetSystem — Overhauled Pet Owner Bookings, Live Triage Queue & Comm Console (owner_bookings.php)
+ * HealthWing / VetSystem — Pet Owner Bookings, Live Triage Queue & Comm Console (owner_bookings.php)
  *
  * Displays:
  * 1. Owner's Scheduled Appointments (with assigned Veterinarian, Room, Duration, Preemption notices,
@@ -76,12 +76,11 @@ $conn->close();
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8">
     <meta name="viewport" content=" width=device-width, initial-scale=1.0">
     <title>My Bookings & Live Triage | HealthWing</title>
-    <link href="vendor/tailwind/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="admin/dashboard.css">
+    <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="api/asset_proxy.php?f=admin/dashboard.css">
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .owner-wrap { max-width: 1260px; margin: 28px auto 70px; padding: 0 20px; }

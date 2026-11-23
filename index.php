@@ -11,16 +11,16 @@ $username = $isLoggedIn ? $_SESSION['username'] : null;
     <meta charset="UTF-8"/>
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
     <title>HealthWing | Smart Veterinary Clinic & Priority Triage</title>
-    <link href="vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
-    <link href="vendor/swiper/swiper-bundle.min.css" rel="stylesheet"/>
-    <script src="vendor/tailwind/tailwind-browser.js"></script>
-    <script src="vendor/swiper/swiper-bundle.min.js"></script>
+    <link href="api/asset_proxy.php?f=vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
+    <link href="api/asset_proxy.php?f=vendor/swiper/swiper-bundle.min.css" rel="stylesheet"/>
+    <script src="api/asset_proxy.php?f=vendor/tailwind/tailwind-browser.js"></script>
+    <script src="api/asset_proxy.php?f=vendor/swiper/swiper-bundle.min.js"></script>
 </head>
 <body class="bg-[#F4F9FA] text-[#16262A]">
 <?php include __DIR__ . '/includes/navbar.php'; ?>
 
 <!-- Hero Section -->
-<div class="relative w-full h-[420px] bg-cover bg-center flex items-center" style="background-image: url('images/body.jpg');">
+<div class="relative w-full h-[420px] bg-cover bg-center flex items-center" style="background-image: url('assets/images/body.jpg');">
     <div class="absolute inset-0 bg-gradient-to-r from-[#16262A]/80 via-[#16262A]/45 to-transparent"></div>
     <div class="relative max-w-6xl mx-auto px-6 w-full">
         <div class="max-w-xl text-white">
@@ -66,53 +66,53 @@ $username = $isLoggedIn ? $_SESSION['username'] : null;
 </div>
 
 <!-- Services Grid -->
-<div class="py-10 bg-cover bg-center" style="background-image: url('images/background.jpg');">
+<div class="py-10 bg-cover bg-center" style="background-image: url('assets/images/background.jpg');">
     <h2 class="text-center text-3xl font-bold mb-6 text-white drop-shadow">Our Clinical Services</h2>
     <div class="max-w-6xl mx-auto px-5">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            <a href="dental.php" class="block">
+            <a href="services.php?service=dental" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/Dental.svg" alt="Dental">
+                    <img class="h-52 mx-auto" src="assets/icons/Dental.svg" alt="Dental">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">DENTAL CARE (60 MIN)</p>
                     </div>
                 </div>
             </a>
-            <a href="surgery.php" class="block">
+            <a href="services.php?service=surgery" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/Surgery.svg" alt="Surgery">
+                    <img class="h-52 mx-auto" src="assets/icons/Surgery.svg" alt="Surgery">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">SURGERY (90 MIN)</p>
                     </div>
                 </div>
             </a>
-            <a href="vaccination.php" class="block">
+            <a href="services.php?service=vaccination" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/Vaccination.svg" alt="Vaccination">
+                    <img class="h-52 mx-auto" src="assets/icons/Vaccination.svg" alt="Vaccination">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">VACCINATION (30 MIN)</p>
                     </div>
                 </div>
             </a>
-            <a href="wellness.php" class="block">
+            <a href="services.php?service=wellness" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/Wellness.svg" alt="Wellness">
+                    <img class="h-52 mx-auto" src="assets/icons/Wellness.svg" alt="Wellness">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">WELLNESS CARE (30 MIN)</p>
                     </div>
                 </div>
             </a>
-            <a href="grooming.php" class="block">
+            <a href="services.php?service=grooming" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/services.svg" alt="Grooming">
+                    <img class="h-52 mx-auto" src="assets/icons/services.svg" alt="Grooming">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">GROOMING (60 MIN)</p>
                     </div>
                 </div>
             </a>
-            <a href="parasite.php" class="block">
+            <a href="services.php?service=parasite" class="block">
                 <div class="shadow-lg rounded-xl overflow-hidden transition-transform duration-300 hover:scale-105 bg-white bg-opacity-95 p-3">
-                    <img class="h-52 mx-auto" src="icons/Parasite.svg" alt="Parasite Control">
+                    <img class="h-52 mx-auto" src="assets/icons/Parasite.svg" alt="Parasite Control">
                     <div class="w-full bg-[#1F3A3D] text-center py-3 rounded-lg mt-2">
                         <p class="text-sm font-bold text-white">PARASITE CONTROL (30 MIN)</p>
                     </div>
@@ -142,6 +142,7 @@ $username = $isLoggedIn ? $_SESSION['username'] : null;
     </p>
     <div id="emergencyMsg" class="mb-4 hidden"></div>
     <form id="emergencyBookingForm" action="submit_emergency.php" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
         <div class="flex flex-col md:col-span-2" id="nameFieldContainer" style="display:none;"></div>
         <div class="flex flex-col md:col-span-2" id="emailFieldContainer" style="display:none;"></div>
         <div class="flex flex-col md:col-span-2" id="phoneFieldContainer" style="display:none;"></div>
@@ -267,7 +268,7 @@ document.getElementById('emergencyBookingForm').addEventListener('submit', funct
 <footer class="bg-[#1F3A3D] text-white mt-12 py-8">
     <div class="max-w-6xl mx-auto px-6 flex flex-wrap justify-between items-center gap-4">
         <div class="flex items-center gap-3">
-            <img src="images/logo.png" class="h-8 bg-white p-1 rounded" alt="Logo"/>
+            <img src="assets/images/logo.png" class="h-8 bg-white p-1 rounded" alt="Logo"/>
             <span class="text-xl font-bold">HealthWing Veterinary Clinic</span>
         </div>
         <div class="text-sm text-gray-300">

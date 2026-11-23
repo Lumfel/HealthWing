@@ -1,29 +1,33 @@
 <?php
-require_once __DIR__ . '/includes/security_crypto.php';
+require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
     http_response_code(401);
-    echo json_encode(['success'=> false, 'message'=>'Not logged in.']);
+    echo json_encode(['success' => false, 'message' => 'Not logged in.']);
     exit();
 }
 
-$conn = new mysqli('localhost', 'root', '', 'veterinarydb');
-if ($conn->connect_error) {
-    echo json_encode(['success'=> false, 'message'=>'Database connection failed.']);
+hw_require_csrf();
+
+try {
+    $conn = hw_get_db();
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
     exit();
 }
 
-$stmt = $conn->prepare('SELECT Owner_ID FROM owner WHERE username = ?');
+$stmt = $conn->prepare('SELECT Owner_ID FROM owner WHERE username = ? LIMIT 1');
 $stmt->bind_param('s', $_SESSION['username']);
 $stmt->execute();
-$ownerResult = $stmt->get_result();
-$ownerRow = $ownerResult->fetch_assoc();
+$ownerRow = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$ownerRow) {
-    echo json_encode(['success'=> false, 'message'=>'Owner not found.']);
+    $conn->close();
+    echo json_encode(['success' => false, 'message' => 'Owner not found.']);
     exit();
 }
 $ownerId = (int)$ownerRow['Owner_ID'];
@@ -37,4 +41,4 @@ $stmt->execute();
 $stmt->close();
 $conn->close();
 
-echo json_encode(['success'=> true]);
+echo json_encode(['success' => true]);

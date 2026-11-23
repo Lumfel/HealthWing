@@ -11,7 +11,7 @@ if (!isset($_SESSION['admin_role']) || $_SESSION['admin_role'] !== 'Admin') {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Not authenticated as admin.']);
     } else {
-        header('Location: ../admin_login.html');
+        header('Location: ../admin_login_page.php');
     }
     exit();
 }

@@ -5,8 +5,12 @@
 require_once __DIR__ . '/includes/security_crypto.php';
 hw_start_secure_session();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    hw_require_csrf();
+}
+
 if (!empty($_SESSION['username'])) {
-    hw_cache_invalidate('owner_profile_'. $_SESSION['username']);
+    hw_cache_invalidate('owner_profile_' . $_SESSION['username']);
 }
 
 hw_clear_encrypted_cookie('hw_auth_gcm');

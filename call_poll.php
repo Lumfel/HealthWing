@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/call_common.php';
+require_once __DIR__ . '/includes/db.php';
 
 header('Content-Type: application/json');
 
@@ -16,8 +17,9 @@ if (!$bookingId) {
     call_fail('Missing booking id.');
 }
 
-$conn = new mysqli('localhost', 'root', '', 'veterinarydb');
-if ($conn->connect_error) {
+try {
+    $conn = hw_get_db();
+} catch (Throwable $e) {
     call_fail('Database connection failed.', 500);
 }
 
@@ -38,14 +40,11 @@ if (!$booking) {
 $call = null;
 
 if ($callId) {
-    // Already in a call — just fetch its current state.
     $call = call_load_authorized_session($conn, $callId, $role, $ownerId, $vetId);
 } else {
-    // Not in a call yet — look for one that the OTHER side just started
-    // for this booking (that's what makes the "incoming call"ring).
-    $otherRole = $role === 'owner'? 'vet': 'owner';
+    $otherRole = $role === 'owner' ? 'vet' : 'owner';
     $stmt = $conn->prepare(
-        "SELECT * FROM call_session WHERE Booking_ID = ? AND Initiated_By = ? AND Status = 'ringing'ORDER BY Call_ID DESC LIMIT 1"
+        "SELECT * FROM call_session WHERE Booking_ID = ? AND Initiated_By = ? AND Status = 'ringing' ORDER BY Call_ID DESC LIMIT 1"
     );
     $stmt->bind_param('is', $bookingId, $otherRole);
     $stmt->execute();
@@ -53,12 +52,12 @@ if ($callId) {
     $stmt->close();
 }
 
-$response = ['success'=> true, 'call'=> null, 'new_candidates'=>[]];
+$response = ['success' => true, 'call' => null, 'new_candidates' => []];
 
 if ($call) {
-    $otherRole = $role === 'owner'? 'vet': 'owner';
+    $otherRole = $role === 'owner' ? 'vet' : 'owner';
     $candStmt = $conn->prepare(
-        "SELECT Candidate_ID, Candidate FROM call_ice_candidate WHERE Call_ID = ? AND Sender = ? AND Candidate_ID >? ORDER BY Candidate_ID ASC"
+        "SELECT Candidate_ID, Candidate FROM call_ice_candidate WHERE Call_ID = ? AND Sender = ? AND Candidate_ID > ? ORDER BY Candidate_ID ASC"
     );
     $candStmt->bind_param('isi', $call['Call_ID'], $otherRole, $sinceCandidateId);
     $candStmt->execute();
@@ -66,12 +65,18 @@ if ($call) {
     $candStmt->close();
 
     $response['call'] = [
-        'call_id'=>(int)$call['Call_ID'],
-        'call_type'=>$call['Call_Type'],
-        'initiated_by'=>$call['Initiated_By'],
-        'status'=>$call['Status'],
-        'offer_sdp'=>$call['Offer_SDP'],
-        'answer_sdp'=>$call['Answer_SDP'],
+        'Call_ID' => (int)$call['Call_ID'],
+        'Call_Type' => $call['Call_Type'],
+        'Initiated_By' => $call['Initiated_By'],
+        'Status' => $call['Status'],
+        'Offer_SDP' => $call['Offer_SDP'],
+        'Answer_SDP' => $call['Answer_SDP'],
+        'call_id' => (int)$call['Call_ID'],
+        'call_type' => $call['Call_Type'],
+        'initiated_by' => $call['Initiated_By'],
+        'status' => $call['Status'],
+        'offer_sdp' => $call['Offer_SDP'],
+        'answer_sdp' => $call['Answer_SDP'],
     ];
     $response['new_candidates'] = $candidates;
 }

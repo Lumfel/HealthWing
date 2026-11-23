@@ -87,6 +87,7 @@ try {
     }
 
     if ($action === 'add_checkup') {
+        hw_require_csrf();
         $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
         $petId = (int)($input['pet_id'] ?? 0);
         $date = trim($input['checkup_date'] ?? date('Y-m-d'));
@@ -148,6 +149,7 @@ try {
     }
 
     if ($action === 'update_pet_medical') {
+        hw_require_csrf();
         $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
         $petId = (int)($input['pet_id'] ?? 0);
         $species = trim($input['species'] ?? '');
@@ -189,6 +191,7 @@ try {
     }
 
     if ($action === 'update_room') {
+        hw_require_csrf();
         $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
         $roomId = (int)($input['room_id'] ?? 0);
         $status = trim($input['status'] ?? 'idle');

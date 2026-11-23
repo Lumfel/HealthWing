@@ -1,9 +1,6 @@
 <?php
 /**
- * HealthWing / VetSystem — Upgraded Admin Schedule Management API (admin/manage_schedule.php)
- *
- * Integrates VetSchedulingEngine so Admin schedule creation/updates automatically calculate
- * End_Time, Duration_Minutes, and optimal Veterinarian/Room assignments when Auto-Assign is enabled.
+ * HealthWing / VetSystem — Admin Schedule Management API (admin/manage_schedule.php)
  */
 $ADMIN_GUARD_IS_API = true;
 require_once __DIR__ . '/auth_guard.php';
@@ -16,6 +13,10 @@ try {
     $conn = hw_get_db();
     $engine = new VetSchedulingEngine($conn);
     $action = $_GET['action'] ?? '';
+
+    if (in_array($action, ['create', 'update', 'delete'], true)) {
+        hw_require_csrf();
+    }
 
     if ($action === 'read') {
         $sql = "SELECT s.Schedule_ID, s.Owner_ID, o.First_Name AS OwnerFirstName, o.Last_Name AS OwnerLastName,
@@ -31,17 +32,17 @@ try {
                 ORDER BY s.Appointment_Time DESC";
         $result = $conn->query($sql);
         if (!$result) {
-            throw new Exception($conn->error);
+            throw new Exception("Unable to load schedules.");
         }
-        echo json_encode(['success'=> true, 'schedules'=>$result->fetch_all(MYSQLI_ASSOC)]);
+        echo json_encode(['success' => true, 'schedules' => $result->fetch_all(MYSQLI_ASSOC)]);
     } elseif ($action === 'create') {
         $data = json_decode(file_get_contents("php://input"), true);
         $ownerId = (int)($data['ownerId'] ?? 0);
         $petId = !empty($data['petId']) ? (int)$data['petId'] : null;
         $vetId = !empty($data['vetId']) ? (int)$data['vetId'] : null;
         $roomId = !empty($data['roomId']) ? (int)$data['roomId'] : null;
-        $services = trim($data['services'] ?? '');
-        $time = trim($data['appointmentTime'] ?? '');
+        $services = trim((string)($data['services'] ?? ''));
+        $time = trim((string)($data['appointmentTime'] ?? ''));
         $autoAssign = !empty($data['autoAssign']) || !$vetId || !$roomId;
 
         if (!$ownerId || !$services || !$time) {
@@ -70,9 +71,10 @@ try {
         );
         $stmt->bind_param("iiiissisi", $ownerId, $petId, $vetId, $roomId, $services, $time, $duration, $endTime, $autoFlag);
         if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
+            throw new Exception("Could not create schedule.");
         }
-        echo json_encode(['success'=> true, 'assigned_time'=>$time]);
+        $stmt->close();
+        echo json_encode(['success' => true, 'assigned_time' => $time]);
     } elseif ($action === 'update') {
         $data = json_decode(file_get_contents("php://input"), true);
         $id = (int)($data['scheduleId'] ?? 0);
@@ -80,9 +82,9 @@ try {
         $petId = !empty($data['petId']) ? (int)$data['petId'] : null;
         $vetId = !empty($data['vetId']) ? (int)$data['vetId'] : null;
         $roomId = !empty($data['roomId']) ? (int)$data['roomId'] : null;
-        $services = trim($data['services'] ?? '');
-        $time = trim($data['appointmentTime'] ?? '');
-        $status = trim($data['status'] ?? 'Pending');
+        $services = trim((string)($data['services'] ?? ''));
+        $time = trim((string)($data['appointmentTime'] ?? ''));
+        $status = trim((string)($data['status'] ?? 'Pending'));
 
         if (!$id) {
             throw new Exception("Missing schedule ID");
@@ -101,9 +103,10 @@ try {
         );
         $stmt->bind_param("iiiississi", $ownerId, $petId, $vetId, $roomId, $services, $time, $duration, $endTime, $status, $id);
         if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
+            throw new Exception("Could not update schedule.");
         }
-        echo json_encode(['success'=> true]);
+        $stmt->close();
+        echo json_encode(['success' => true]);
     } elseif ($action === 'delete') {
         $data = json_decode(file_get_contents("php://input"), true);
         $id = (int)($data['scheduleId'] ?? 0);
@@ -113,14 +116,17 @@ try {
         $stmt = $conn->prepare("DELETE FROM schedule WHERE Schedule_ID=?");
         $stmt->bind_param("i", $id);
         if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
+            throw new Exception("Could not delete schedule.");
         }
-        echo json_encode(['success'=> true]);
+        $stmt->close();
+        echo json_encode(['success' => true]);
     } else {
         throw new Exception("Invalid action");
     }
 } catch (Exception $e) {
-    echo json_encode(['success'=> false, 'error'=>$e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
-$conn->close();
+if (isset($conn) && $conn instanceof mysqli) {
+    $conn->close();
+}

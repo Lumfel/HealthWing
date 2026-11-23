@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/call_common.php';
 require_once __DIR__ . '/rate_limit.php';
+require_once __DIR__ . '/includes/db.php';
 rate_limit_check('call_signal', 120, 60);
 
 header('Content-Type: application/json');
@@ -10,6 +11,8 @@ if (!$role) {
     call_fail('You must be signed in.', 401);
 }
 
+hw_require_csrf();
+
 $data = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $data['action'] ?? '';
 $callId = isset($data['call_id']) ? (int)$data['call_id'] : 0;
@@ -18,8 +21,9 @@ if (!$callId || !in_array($action, ['answer', 'ice'], true)) {
     call_fail('Missing or invalid parameters.');
 }
 
-$conn = new mysqli('localhost', 'root', '', 'veterinarydb');
-if ($conn->connect_error) {
+try {
+    $conn = hw_get_db();
+} catch (Throwable $e) {
     call_fail('Database connection failed.', 500);
 }
 
@@ -38,7 +42,7 @@ if (!$session) {
 }
 
 if ($action === 'answer') {
-    $answerSdp = trim($data['sdp_answer'] ?? '');
+    $answerSdp = trim((string)($data['sdp_answer'] ?? ''));
     if ($answerSdp === '') {
         $conn->close();
         call_fail('Missing SDP answer.');
@@ -48,9 +52,7 @@ if ($action === 'answer') {
         call_fail('This call is no longer ringing.');
     }
 
-    // If the vet is the one answering (owner called the vet), record which
-    // vet picked up.
-    if ($role === 'vet'&& $session['Veterinarian_ID'] === null) {
+    if ($role === 'vet' && $session['Veterinarian_ID'] === null) {
         $stmt = $conn->prepare(
             "UPDATE call_session SET Answer_SDP = ?, Status = 'active', Answered_At = NOW(), Veterinarian_ID = ? WHERE Call_ID = ?"
         );
@@ -66,12 +68,12 @@ if ($action === 'answer') {
     $conn->close();
 
     rate_limit_log_event('call_answered', 'allowed');
-    echo json_encode(['success'=>$ok]);
+    echo json_encode(['success' => $ok]);
     exit();
 }
 
 if ($action === 'ice') {
-    $candidate = trim($data['candidate'] ?? '');
+    $candidate = trim((string)($data['candidate'] ?? ''));
     if ($candidate === '') {
         $conn->close();
         call_fail('Missing candidate.');
@@ -81,6 +83,6 @@ if ($action === 'ice') {
     $ok = $stmt->execute();
     $stmt->close();
     $conn->close();
-    echo json_encode(['success'=>$ok]);
+    echo json_encode(['success' => $ok]);
     exit();
 }

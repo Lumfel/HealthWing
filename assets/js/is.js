@@ -59,7 +59,7 @@ document.getElementById("signupForm").addEventListener("submit", function(event)
         if (response.status === "success") {
             alert("Account created successfully!");
             document.getElementById("signupForm").reset();  // Reset form fields
-            window.location.href = "Sign in html.html";
+            window.location.href = "login.php";
         } else if (response.status === "exists") {
             alert("Username or email already exists.");
         } else {

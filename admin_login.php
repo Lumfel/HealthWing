@@ -8,6 +8,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/turnstile.php';
 
 header('Content-Type: application/json');
+hw_require_csrf();
 
 $data = json_decode(file_get_contents("php://input"), true);
 $username = trim((string)($data['username'] ?? ''));

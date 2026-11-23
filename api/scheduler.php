@@ -69,6 +69,7 @@ try {
     }
 
     if ($action === 'auto_assign_all') {
+        hw_require_csrf();
         // Requires Vet or Admin session
         $isVet = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian';
         $isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';

@@ -1,103 +1,67 @@
-# =========================================================
-# HealthWing / VetSystem — .htaccess
-# Clean URLs, caching, compression, and basic hardening.
-# Requires Apache mod_rewrite, mod_expires, mod_deflate, mod_headers
-# (Laragon has all of these available by default).
-# =========================================================
-
-RewriteEngine On
-
-# ---------- Force HTTPS ----------
-# Everywhere except local testing addresses gets redirected to https.
-# Exempted: localhost/127.0.0.1, any .test domain (like vetsystem.test),
-# and private LAN IP ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x) — since
-# none of those have an SSL certificate set up, and forcing https there
-# would just break local/LAN testing with no fallback. Once you're on the
-# Cloudflare Tunnel domain (or any other real public domain), this forces
-# every visitor onto https.
-RewriteCond %{HTTPS} off
-RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$
-RewriteCond %{HTTP_HOST} !\.test(:\d+)?$
-RewriteCond %{HTTP_HOST} !^192\.168\.
-RewriteCond %{HTTP_HOST} !^10\.
-RewriteCond %{HTTP_HOST} !^172\.(1[6-9]|2[0-9]|3[0-1])\.
-RewriteCond %{HTTP_X_FORWARDED_PROTO} !https
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-<IfModule mod_headers.c>
-    # Tell browsers to remember to use https for this site for a year,
-    # once they've reached it over https at least once. Only sent on an
-    # actual https response, so it never affects local http testing.
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
-</IfModule>
-
-# ---------- Clean routes -> real files ----------
-# Old direct .php/.html links still work exactly as before — these are
-# additional, friendlier aliases, not replacements.
-RewriteRule ^calendar/?$ public_calendar.php [L]
-RewriteRule ^user/?$ owner_bookings.php [L]
-RewriteRule ^user/book/?$ appointment_schedule.php [L]
-RewriteRule ^vet/?$ vetindex.php [L]
-RewriteRule ^admin/?$ admin/ADMIN_VET_1.php [L]
-RewriteRule ^signin/?$ Sign%20in%20html.html [L]
-RewriteRule ^signup/?$ Sign%20Up.html [L]
-RewriteRule ^choose-role/?$ chooserole.html [L]
-RewriteRule ^about/?$ AboutUs.php [L]
-RewriteRule ^contact/?$ contact.php [L]
-RewriteRule ^services/dental/?$ dental.php [L]
-RewriteRule ^services/surgery/?$ surgery.php [L]
-RewriteRule ^services/vaccination/?$ vaccination.php [L]
-RewriteRule ^services/wellness/?$ wellness.php [L]
-RewriteRule ^services/grooming/?$ grooming.php [L]
-RewriteRule ^services/parasite/?$ parasite.php [L]
-
-# ---------- Hardening ----------
-# Never let visitors browse folder contents
+# HealthWing / VetSystem — Security & Subdirectory-Safe Apache Rules
 Options -Indexes
 
-# Block direct access to files that should never be downloadable
-<FilesMatch "\.(sql|log|md|txt|bat|env|gitignore|gcm|key)$">
-    Require all denied
-</FilesMatch>
-
-# Extra safety: block access to the SQL patch files by name specifically
-<FilesMatch "^(database_patch|admin_db_patch|pet_records_patch|traffic_log_patch|veterinarydb)\.sql$">
-    Require all denied
-</FilesMatch>
-
-# Server-side cache files are for the app's own use only
-<FilesMatch "^cache_.*\.json$">
-    Require all denied
-</FilesMatch>
-
-# Rate-limit tracking files are never meant to be publicly readable
-RewriteRule ^rate_limit_data/ - [F,L]
-
-# Uploaded emergency photos and pet photos should only ever be served as images, never executed
-<IfModule mod_rewrite.c>
-    RewriteCond %{REQUEST_URI} ^/(emergency_uploads|pet_photos)/.*\.(php|phtml|php5|phar)$ [NC]
-    RewriteRule .* - [F,L]
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+    SetEnvIfNoCase X-Forwarded-Proto "https" HW_HTTPS=1
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HW_HTTPS
 </IfModule>
 
-# ---------- Compression (smaller responses = faster + less bandwidth) ----------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Enforce HTTPS for external non-local hosts (subdirectory-safe)
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$
+    RewriteCond %{HTTP_HOST} !\.test(:\d+)?$
+    RewriteCond %{HTTP_HOST} !^192\.168\.
+    RewriteCond %{HTTP_HOST} !^10\.
+    RewriteCond %{HTTP_HOST} !^172\.(1[6-9]|2[0-9]|3[0-1])\.
+    RewriteCond %{HTTP_X_FORWARDED_PROTO} !https
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Block dotfiles (.env, .git, .hw_master_key, .htaccess) and composer manifests
+    RewriteRule (^|/)\. - [F,L]
+    RewriteRule ^composer\.(json|lock)$ - [F,NC,L]
+
+    # Block direct browser navigation/download of raw assets, configs, keys, docs, and archives
+    RewriteRule \.(html|htm|css|js|map|sql|json|gcm|key|md|bat|sh|env|log)$ - [F,NC,L]
+
+    # Deny sensitive directories even if accessed directly
+    RewriteRule ^(archives|docs|includes|database|rate_limit_data)(/|$) - [F,NC,L]
+
+    # Friendly subdirectory-safe routes
+    RewriteRule ^calendar/?$ public_calendar.php [L,QSA]
+    RewriteRule ^user/?$ owner_bookings.php [L,QSA]
+    RewriteRule ^user/book/?$ appointment_schedule.php [L,QSA]
+    RewriteRule ^vet/?$ vetindex.php [L,QSA]
+    RewriteRule ^admin/?$ admin/ADMIN_VET_1.php [L,QSA]
+    RewriteRule ^signin/?$ login.php [L,QSA]
+    RewriteRule ^signup/?$ register.php [L,QSA]
+    RewriteRule ^choose-role/?$ choose_role.php [L,QSA]
+    RewriteRule ^about/?$ AboutUs.php [L,QSA]
+    RewriteRule ^contact/?$ contact.php [L,QSA]
+    RewriteRule ^receipts/?$ receipts.php [L,QSA]
+    RewriteRule ^services/?$ services.php [L,QSA]
+    RewriteRule ^services/(wellness|vaccination|dental|surgery|parasite|grooming)/?$ services.php?service=$1 [L,QSA]
+
+    # Extensionless PHP resolution (subdirectory-safe)
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.+?)/?$ $1.php [L,QSA]
+</IfModule>
+
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json
 </IfModule>
 
-# ---------- Browser caching (repeat visits load instantly, less server load) ----------
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType image/jpeg "access plus 30 days"
     ExpiresByType image/png "access plus 30 days"
     ExpiresByType image/webp "access plus 30 days"
     ExpiresByType image/svg+xml "access plus 30 days"
-    ExpiresByType text/css "access plus 7 days"
-    ExpiresByType application/javascript "access plus 7 days"
-    ExpiresByType text/javascript "access plus 7 days"
-</IfModule>
-
-<IfModule mod_headers.c>
-    <FilesMatch "\.(jpg|jpeg|png|webp|svg|css|js)$">
-        Header set Cache-Control "public, max-age=604800"
-    </FilesMatch>
 </IfModule>

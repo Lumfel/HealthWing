@@ -17,6 +17,9 @@ $bookingSummary = null;
 $errorMsg = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!hw_csrf_verify()) {
+        $errorMsg = 'Invalid or expired security token. Please go back and submit the booking form again.';
+    } else {
     try {
         $conn = hw_get_db();
         $engine = new VetSchedulingEngine($conn);
@@ -156,17 +159,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (Throwable $e) {
         $errorMsg = $e->getMessage();
     }
+    }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8">
-    <meta name="viewport" content=" width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Appointment Scheduled | HealthWing</title>
-    <link href="vendor/tailwind/tailwind.min.css" rel="stylesheet">
-    <link href="admin/dashboard.css" rel="stylesheet">
+    <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet">
+    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet">
 </head>
 <body style="background:#F4F9FA;min-height:100vh;font-family:system-ui,-apple-system,sans-serif;">
 <?php include __DIR__ . '/includes/navbar.php'; ?>

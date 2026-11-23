@@ -31,12 +31,11 @@ if (!$ownerId) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8">
     <meta name="viewport" content=" width=device-width, initial-scale=1.0">
     <title>My Pets · HealthWing</title>
-    <link href="vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="admin/dashboard.css" rel="stylesheet"/>
+    <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
+    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
         body { background: var(--bg); font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .pet-card {

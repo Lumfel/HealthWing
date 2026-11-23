@@ -53,12 +53,11 @@ $prefillDate = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8"/>
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
     <title>Smart Appointment Scheduling | HealthWing</title>
-    <link href="vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="admin/dashboard.css" rel="stylesheet"/>
+    <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
+    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .book-wrap { max-width: 860px; margin: 32px auto 70px; padding: 0 20px; }
@@ -89,6 +88,7 @@ $prefillDate = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET
         </div>
 
         <form action="submit_booking.php" method="POST" id="smartBookingForm">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:18px;">
                 <div>
                     <label class="form-label">Owner Name</label>

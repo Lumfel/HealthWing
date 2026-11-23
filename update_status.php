@@ -1,12 +1,10 @@
 <?php
 /**
  * HealthWing / VetSystem — Veterinarian Emergency Status Update + Queue Re-Evaluation (update_status.php)
- *
- * Updates an emergency booking's status and automatically triggers
- * VetSchedulingEngine::recalculateEmergencyTriage() so freed rooms and vets are
- * immediately reassigned to the next highest-priority waiting emergency.
  */
-require_once __DIR__ . '/includes/security_crypto.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/scheduling_engine.php';
+require_once __DIR__ . '/includes/receipt_blockchain.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
@@ -15,43 +13,43 @@ $isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin'
 
 if (!$isVet && !$isAdmin) {
     http_response_code(401);
-    echo json_encode(['success'=> false, 'message'=>'Not logged in as a veterinarian or admin.']);
+    echo json_encode(['success' => false, 'message' => 'Not logged in as a veterinarian or admin.']);
     exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(['success'=> false, 'message'=>'Invalid request method.']);
+    echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
     exit();
 }
 
-require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/scheduling_engine.php';
+hw_require_csrf();
 
 $data = json_decode(file_get_contents('php://input'), true);
 if (!isset($data['booking_id'], $data['status'])) {
-    echo json_encode(['success'=> false, 'message'=>'Invalid input.']);
+    echo json_encode(['success' => false, 'message' => 'Invalid input.']);
     exit();
 }
 
 $bookingId = (int)$data['booking_id'];
-$status = $data['status'];
-$reason = trim($data['reason'] ?? '');
+$status = (string)$data['status'];
+$reason = trim((string)($data['reason'] ?? ''));
 $allowedStatuses = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
 
 if (!in_array($status, $allowedStatuses, true)) {
-    echo json_encode(['success'=> false, 'message'=>'Invalid status.']);
+    echo json_encode(['success' => false, 'message' => 'Invalid status.']);
     exit();
 }
 
-if ($status === 'Cancelled'&& $reason === '') {
-    echo json_encode(['success'=> false, 'message'=>'A reason is required when cancelling a request.']);
+if ($status === 'Cancelled' && $reason === '') {
+    echo json_encode(['success' => false, 'message' => 'A reason is required when cancelling a request.']);
     exit();
 }
 
 try {
     $conn = hw_get_db();
 } catch (Throwable $e) {
-    echo json_encode(['success'=> false, 'message'=>'Database connection failed.']);
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
     exit();
 }
 
@@ -77,7 +75,6 @@ if ($status === 'Cancelled') {
 $ok = $stmt->execute();
 $stmt->close();
 
-// Release any room tied to this emergency if resolved, then re-run triage queue so next pet moves up
 if ($isResolved) {
     $relRoom = $conn->prepare("UPDATE room SET Status = 'idle', Current_Emergency_ID = NULL WHERE Current_Emergency_ID = ?");
     $relRoom->bind_param('i', $bookingId);
@@ -85,12 +82,41 @@ if ($isResolved) {
     $relRoom->close();
 }
 
+$receiptInfo = null;
+if ($ok && $status === 'Completed') {
+    try {
+        $q = $conn->prepare(
+            "SELECT e.Owner_ID, e.Name, e.Severity_Level, p.Pet_Name
+             FROM emergency_booking e
+             LEFT JOIN pet p ON e.Pet_ID = p.Pet_ID
+             WHERE e.Booking_ID = ? LIMIT 1"
+        );
+        $q->bind_param('i', $bookingId);
+        $q->execute();
+        if ($row = $q->get_result()->fetch_assoc()) {
+            $issuer = $isAdmin ? ('Admin (' . ($_SESSION['admin_username'] ?? 'Clinic') . ')') : ($_SESSION['username'] ?? 'Veterinarian');
+            $receiptInfo = hw_receipt_issue($conn, [
+                'reference_type' => 'emergency',
+                'reference_id' => $bookingId,
+                'owner_id' => $row['Owner_ID'] ? (int)$row['Owner_ID'] : null,
+                'owner_name' => $row['Name'] ?: 'Clinic Client',
+                'pet_name' => $row['Pet_Name'] ?: 'Emergency Patient',
+                'service_summary' => 'Emergency Triage & Care (' . ($row['Severity_Level'] ?: 'Urgent') . ')',
+                'issued_by' => $issuer,
+            ]);
+        }
+        $q->close();
+    } catch (Throwable $e) {
+    }
+}
+
 $engine = new VetSchedulingEngine($conn);
 $triageSummary = $engine->recalculateEmergencyTriage();
 
 echo json_encode([
-    'success'=>$ok,
-    'triage_summary'=>$triageSummary,
+    'success' => $ok,
+    'triage_summary' => $triageSummary,
+    'receipt' => $receiptInfo,
 ]);
 
 $conn->close();

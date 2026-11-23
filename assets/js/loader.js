@@ -1,27 +1,17 @@
 /**
- * HealthWing / VetSystem — Bone Loading Engine (bone-loader.js)
- *
- * Implements:
- * 1. Reusable Skeleton "Bone"Generators (`HWBone.tableRows`, `HWBone.petCards`, `HWBone.roomCards`,
- *    `HWBone.caseCards`, `HWBone.calendarGrid`, `HWBone.chatBubbles`, `HWBone.slotPreview`)
- *    that automatically populate empty/loading containers with realistic bone-shaped shimmer placeholders.
- * 2. Animated SVG Dog-Bone Spinner & Page/Action Overlay (`HWBone.showOverlay`, `HWBone.hideOverlay`,
- *    `HWBone.inlineSpinner`) for page loads, form submissions, and triage calculations.
- * 3. Automatic Fetch Interceptor (`window.fetch`wrapper) that lights up the top bone progress bar
- *    and injects skeleton bones into target tables/grids before data arrives.
+ * HealthWing / VetSystem — Loading & CSRF Fetch Engine (assets/js/loader.js)
  */
 (function (global) {
-    function dogBoneSvg(className = 'hw-bone-svg-spin', fill = '#4A9DBB') {
+    function spinnerSvg(className = 'hw-bone-svg-spin', fill = '#4A9DBB') {
         return `<svg class="${className}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M19.5 11C14.8 11 11 14.8 11 19.5C11 22.1 12.2 24.4 14.1 25.9L38.1 49.9C39.6 51.8 41.9 53 44.5 53C49.2 53 53 49.2 53 44.5C53 41.9 51.8 39.6 49.9 38.1L25.9 14.1C24.4 12.2 22.1 11 19.5 11ZM14.5 19.5C12.6 19.5 11 21.1 11 23C11 26.9 14.1 30 18 30C19.5 30 20.9 29.5 22 28.6L35.4 42C34.5 43.1 34 44.5 34 46C34 49.9 37.1 53 41 53C42.9 53 44.5 51.4 44.5 49.5" fill="${fill}" opacity="0.22"/>
-            <path d="M45.2 12.2C41.8 12.2 39 14.7 38.6 18.0L18.0 38.6C14.7 39.0 12.2 41.8 12.2 45.2C12.2 48.9 15.2 51.8 18.8 51.8C20.2 51.8 21.5 51.3 22.6 50.5C21.8 51.6 21.3 52.9 21.3 54.3C21.3 58.0 24.3 61.0 28.0 61.0C31.4 61.0 34.2 58.5 34.6 55.2L55.2 34.6C58.5 34.2 61.0 31.4 61.0 28.0C61.0 24.3 58.0 21.3 54.3 21.3C52.9 21.3 51.6 21.8 50.5 22.6C51.3 21.5 51.8 20.2 51.8 18.8C51.8 15.2 48.9 12.2 45.2 12.2Z"
-                  transform="translate(-4 -4)" fill="${fill}" stroke="#1F3A3D" stroke-width="2.5" stroke-linejoin="round"/>
+            <circle cx="32" cy="32" r="24" stroke="#E4EEF0" stroke-width="6"/>
+            <path d="M32 8 A24 24 0 0 1 56 32" stroke="${fill}" stroke-width="6" stroke-linecap="round"/>
         </svg>`;
     }
 
-    function inlineSpinner(label = 'Loading clinical data...') {
+    function inlineSpinner(label = 'Loading...') {
         return `<span class="hw-bone-inline-loader">
-            ${dogBoneSvg('hw-bone-svg-rock', '#4A9DBB')}
+            ${spinnerSvg('hw-bone-svg-spin', '#4A9DBB')}
             <span>${label}</span>
         </span>`;
     }
@@ -53,7 +43,7 @@
             html += `
             <div class="hw-bone-card">
                 <div class="hw-bone hw-bone-photo">
-                    ${dogBoneSvg('hw-bone-svg-rock', '#4A9DBB')}
+                    ${spinnerSvg('hw-bone-svg-spin', '#4A9DBB')}
                 </div>
                 <div class="hw-bone hw-bone-lg hw-bone-shape" style="width:58%;margin-top:4px;"></div>
                 <div class="hw-bone hw-bone-sm" style="width:42%;"></div>
@@ -138,7 +128,7 @@
         return `
             <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
                 <div style="display:flex;align-items:center;gap:10px;">
-                    ${dogBoneSvg('hw-bone-svg-spin', '#4A9DBB')}
+                    ${spinnerSvg('hw-bone-svg-spin', '#4A9DBB')}
                     <div class="hw-bone hw-bone-md hw-bone-shape" style="width:62%;"></div>
                 </div>
                 <div style="display:flex;gap:14px;flex-wrap:wrap;">
@@ -161,9 +151,9 @@
             ov.id = 'hwBoneOverlay';
             ov.innerHTML = `
                 <div class="hw-bone-loader-card">
-                    ${dogBoneSvg('hw-bone-svg-spin', '#4A9DBB')}
-                    <div class="hw-bone-loader-title" id="hwBoneOverlayTitle">Fetching Clinic Data...</div>
-                    <div class="hw-bone-loader-sub" id="hwBoneOverlaySub">Running smart scheduling & priority triage sync</div>
+                    ${spinnerSvg('hw-bone-svg-spin', '#4A9DBB')}
+                    <div class="hw-bone-loader-title" id="hwBoneOverlayTitle">Loading...</div>
+                    <div class="hw-bone-loader-sub" id="hwBoneOverlaySub">Please wait while clinic data loads</div>
                     <div class="hw-bone-progress-track">
                         <div class="hw-bone-progress-bar"></div>
                     </div>
@@ -173,7 +163,7 @@
         }
     }
 
-    function showOverlay(title = 'Processing...', subtitle = 'Synchronizing clinic schedule & priority triage') {
+    function showOverlay(title = 'Loading...', subtitle = 'Synchronizing clinic schedule and triage data') {
         ensureOverlayDOM();
         document.getElementById('hwBoneOverlayTitle').textContent = title;
         document.getElementById('hwBoneOverlaySub').textContent = subtitle;
@@ -187,18 +177,36 @@
         }
     }
 
-    // Intercept window.fetch to show the top bone shimmer bar on every async call
+    // Intercept window.fetch to show the loading bar and inject CSRF token on state-changing requests
     let activeFetches = 0;
     const origFetch = global.fetch ? global.fetch.bind(global) : null;
     if (origFetch) {
-        global.fetch = function (...args) {
+        global.fetch = function (input, init) {
+            const opts = Object.assign({}, init || {});
+            const method = String(opts.method || (input && input.method) || 'GET').toUpperCase();
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+                const csrfMeta = document.querySelector('meta[name="hw-csrf-token"]');
+                const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+                if (csrfToken) {
+                    if (opts.headers instanceof Headers) {
+                        if (!opts.headers.has('X-CSRF-Token')) {
+                            opts.headers.set('X-CSRF-Token', csrfToken);
+                        }
+                    } else {
+                        opts.headers = Object.assign({}, opts.headers || {});
+                        if (!opts.headers['X-CSRF-Token'] && !opts.headers['x-csrf-token']) {
+                            opts.headers['X-CSRF-Token'] = csrfToken;
+                        }
+                    }
+                }
+            }
             activeFetches++;
             const topBar = document.getElementById('hwTopBoneBar');
             if (topBar) topBar.classList.add('active');
-            return origFetch(...args).finally(() =>{
+            return origFetch(input, opts).finally(() => {
                 activeFetches = Math.max(0, activeFetches - 1);
                 if (activeFetches === 0 && topBar) {
-                    setTimeout(() =>{
+                    setTimeout(() => {
                         if (activeFetches === 0) topBar.classList.remove('active');
                     }, 180);
                 }
@@ -206,11 +214,11 @@
         };
     }
 
-    // Automatically inject initial bone skeletons into empty tables/grids on DOMContentLoaded
-    function autoPopulateInitialBones() {
+    // Automatically inject initial placeholder skeletons into empty tables/grids on DOMContentLoaded
+    function autoPopulateInitialLoaders() {
         ensureOverlayDOM();
 
-        // Hide initial page-load bone overlay smoothly after 320ms
+        // Hide initial page-load overlay smoothly after 320ms
         setTimeout(hideOverlay, 320);
 
         // Slow Fade-In and Fade-Out Observer for all Cards
@@ -241,18 +249,17 @@
             mutObs.observe(document.body, { childList: true, subtree: true });
         }
 
-
-        // Show bone overlay automatically when any non-AJAX form is submitted
-        document.querySelectorAll('form').forEach(form =>{
+        // Show loading overlay automatically when any non-AJAX form is submitted
+        document.querySelectorAll('form').forEach(form => {
             form.addEventListener('submit', function () {
                 if (!this.id || this.id === 'smartBookingForm') {
-                    showOverlay('Locking Smart Appointment...', 'Matching optimal specialist veterinarian & clinic room');
+                    showOverlay('Loading...', 'Processing your request');
                 }
             });
         });
 
-        // Pre-fill empty data-tables with skeleton bone rows while their initial fetch is in flight
-        document.querySelectorAll('table.data-table').forEach(tbl =>{
+        // Pre-fill empty data-tables with skeleton rows while their initial fetch is in flight
+        document.querySelectorAll('table.data-table').forEach(tbl => {
             const tbody = tbl.querySelector('tbody');
             const thCount = tbl.querySelectorAll('thead th').length || 6;
             if (tbody && tbody.children.length === 0) {
@@ -282,13 +289,14 @@
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', autoPopulateInitialBones);
+        document.addEventListener('DOMContentLoaded', autoPopulateInitialLoaders);
     } else {
-        autoPopulateInitialBones();
+        autoPopulateInitialLoaders();
     }
 
-    global.HWBone = {
-        dogBoneSvg,
+    const loaderApi = {
+        dogBoneSvg: spinnerSvg,
+        spinnerSvg,
         inlineSpinner,
         tableRows,
         petCards,
@@ -300,4 +308,6 @@
         showOverlay,
         hideOverlay,
     };
+    global.HWBone = loaderApi;
+    global.HWLoader = loaderApi;
 })(window);

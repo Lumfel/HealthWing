@@ -88,9 +88,9 @@ function handleLogout() {
     } catch (e) {}
     fetch("logout.php", { method: "POST", credentials: "same-origin" })
         .then(() => {
-            window.location.replace("Sign in html.html");
+            window.location.replace("login.php");
         })
         .catch(() => {
-            window.location.replace("Sign in html.html");
+            window.location.replace("login.php");
         });
 }

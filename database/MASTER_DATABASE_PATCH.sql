@@ -1,8 +1,5 @@
--- ============================================================================
--- HealthWing / VetSystem — Clean Rebuilt Database Schema & Seed (veterinarydb.sql)
--- ============================================================================
--- Includes:
---   - All 14 normalized & overhauled InnoDB tables (utf8mb4)
+-- HealthWing / VetSystem — Normalized Schema & Seed
+-- Includes 14 clinic tables plus receipt_blocks
 --   - All legacy/junk rows removed — seeded with 1 User (Owner), 1 Veterinarian, 1 Admin
 --   - 5 Specialized Clinic Rooms, 1 Sample Pet, 1 Checkup, 1 Scheduled Visit, 1 Triage Case
 --

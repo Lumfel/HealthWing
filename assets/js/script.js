@@ -44,7 +44,7 @@ if (ownerForm) {
             if (response.status === 'success') {
                 alert('Account created successfully!');
                 ownerForm.reset();
-                window.location.href = 'Sign in html.html';
+                window.location.href = 'login.php';
             } else if (response.status === 'exists') {
                 alert('Username or email already exists.');
             } else {
@@ -87,7 +87,7 @@ if (vetForm) {
             if (response.status === 'success') {
                 alert('Your veterinarian account request has been submitted. An admin needs to approve it before you can sign in — you\'ll be notified once that happens.');
                 vetForm.reset();
-                window.location.href = 'Sign in html.html';
+                window.location.href = 'login.php';
             } else if (response.status === 'exists') {
                 alert('Username or email already exists.');
             } else {

@@ -1,31 +1,16 @@
 <?php
 /**
- * HealthWing / VetSystem — AES-256-GCM Security, Persistent Sliding Cookie & Cache Engine
+ * HealthWing / VetSystem — AES-256-GCM Security, Persistent Sliding Cookie, CSRF & Cache Engine
  * (includes/security_crypto.php)
- *
- * Capabilities:
- * 1. Authenticated AES-256-GCM Encryption & Decryption (`hw_encrypt_gcm`, `hw_decrypt_gcm`)
- *    with 256-bit key derivation, 96-bit CSPRNG IV (`random_bytes(12)`), and 128-bit GCM authentication tag.
- * 2. Persistent Sliding-Window Session & Cookie Management (`hw_start_secure_session`):
- *    - Dedicated project session storage (`rate_limit_data/sessions`) so Windows/Laragon's
- *      default 24-minute global `/tmp` garbage collector never logs active users out.
- *    - 30-day default persistent cookie lifetime (`2,592,000` seconds) and 90-day lifetime
- *      when "Remember Me" is enabled (`7,776,000` seconds).
- *    - Automatic restoration of both User/Veterinarian (`hw_auth_gcm`, `hw_user_gcm`) and
- *      Admin (`hw_admin_gcm`) sessions whenever a browser is reopened.
- *    - Automatic sliding-window renewal: refreshes cookie & PHP session expiry when >1 hour
- *      has elapsed so you never have to constantly log in again.
- * 3. AES-256-GCM Encrypted Server-Side & User-Side Fast Cache (`hw_cache_get`, `hw_cache_set`,
- *    `hw_cache_invalidate`).
  */
 
 if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     define('HW_SECURITY_CRYPTO_LOADED', true);
-    define('HW_COOKIE_DEFAULT_TTL', 30 * 86400);  // 30 days (2,592,000s) standard persistent login
-    define('HW_COOKIE_REMEMBER_TTL', 90 * 86400); // 90 days (7,776,000s) when Remember Me is checked
+    define('HW_COOKIE_DEFAULT_TTL', 90 * 86400);
+    define('HW_COOKIE_REMEMBER_TTL', 90 * 86400);
 
     /**
-     * Resolves or generates the 256-bit (32-byte) clinic master key.
+     * Resolves or generates the 256-bit (32-byte) clinic master key strictly outside the webroot.
      */
     function hw_get_master_key(): string
     {
@@ -35,32 +20,44 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
         }
 
         $envKey = getenv('HW_MASTER_KEY');
-        if ($envKey && strlen($envKey) >= 16) {
+        if ($envKey !== false && strlen($envKey) >= 16) {
             $cachedKey = hash('sha256', $envKey, true);
             return $cachedKey;
         }
 
-        $keyDir = dirname(__DIR__) . '/rate_limit_data';
-        if (!is_dir($keyDir)) {
-            @mkdir($keyDir, 0750, true);
+        $outsideDir = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.healthwing_secrets';
+        if (!is_dir($outsideDir)) {
+            @mkdir($outsideDir, 0700, true);
         }
-        $keyFile = $keyDir . '/.hw_master_key';
+
+        if (is_dir($outsideDir) && is_writable($outsideDir)) {
+            $keyFile = $outsideDir . DIRECTORY_SEPARATOR . '.hw_master_key';
+        } else {
+            $keyFile = rtrim(sys_get_temp_dir(), "\\/") . DIRECTORY_SEPARATOR . '.healthwing_hw_master_key';
+        }
+
         if (file_exists($keyFile)) {
             $raw = trim((string)@file_get_contents($keyFile));
             if (strlen($raw) === 64 && ctype_xdigit($raw)) {
-                $cachedKey = hex2bin($raw);
-                return $cachedKey;
+                $bin = hex2bin($raw);
+                if ($bin !== false && strlen($bin) === 32) {
+                    $cachedKey = $bin;
+                    return $cachedKey;
+                }
             }
         }
 
         $newBytes = random_bytes(32);
-        @file_put_contents($keyFile, bin2hex($newBytes));
+        if (@file_put_contents($keyFile, bin2hex($newBytes), LOCK_EX) === false) {
+            throw new RuntimeException('Unable to persist master encryption key outside webroot.');
+        }
+        @chmod($keyFile, 0600);
         $cachedKey = $newBytes;
         return $cachedKey;
     }
 
     /**
-     * Encrypts any string using AES-256-GCM with a 12-byte random IV and 16-byte authentication tag.
+     * Encrypts plaintext using AES-256-GCM. Fails closed by throwing an exception if OpenSSL is unavailable.
      * Format: enc:gcm:<base64(iv . tag . ciphertext)>
      */
     function hw_encrypt_gcm(?string $plaintext, string $aad = 'healthwing-v2'): ?string
@@ -71,8 +68,8 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
         if (strpos($plaintext, 'enc:gcm:') === 0) {
             return $plaintext;
         }
-        if (!function_exists('openssl_encrypt')) {
-            return $plaintext;
+        if (!function_exists('openssl_encrypt') || !in_array('aes-256-gcm', openssl_get_cipher_methods(), true)) {
+            throw new RuntimeException('AES-256-GCM encryption is unavailable.');
         }
 
         $key = hw_get_master_key();
@@ -90,7 +87,7 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
         );
 
         if ($ciphertext === false || strlen($tag) !== 16) {
-            return $plaintext;
+            throw new RuntimeException('AES-256-GCM encryption failed.');
         }
 
         return 'enc:gcm:' . base64_encode($iv . $tag . $ciphertext);
@@ -136,13 +133,34 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     }
 
     /**
-     * Starts a persistent 30-day/90-day PHP session in a dedicated directory and automatically
-     * restores + slides User, Veterinarian, and Admin logins from AES-256-GCM cookies.
+     * Resolves the client IP strictly from REMOTE_ADDR unless REMOTE_ADDR matches an explicit trusted proxy list.
+     */
+    function hw_get_client_ip(): string
+    {
+        $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+        $trustedRaw = getenv('HW_TRUSTED_PROXIES');
+        if ($trustedRaw !== false && trim($trustedRaw) !== '') {
+            $trustedProxies = array_filter(array_map('trim', explode(',', $trustedRaw)));
+            if (in_array($remoteAddr, $trustedProxies, true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+                $parts = array_map('trim', explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']));
+                foreach ($parts as $candidate) {
+                    if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                        return $candidate;
+                    }
+                }
+            }
+        }
+        return filter_var($remoteAddr, FILTER_VALIDATE_IP) ? $remoteAddr : '0.0.0.0';
+    }
+
+    /**
+     * Starts a persistent 90-day sliding PHP session in a dedicated directory and automatically
+     * restores + slides User, Veterinarian, and Admin logins from AES-256-GCM HttpOnly cookies.
      */
     function hw_start_secure_session(): void
     {
         $onHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+            || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
 
         if (session_status() === PHP_SESSION_NONE) {
             $sessDir = dirname(__DIR__) . '/rate_limit_data/sessions';
@@ -166,7 +184,10 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             @session_start();
         }
 
-        // 1. Auto-restore User / Veterinarian session from `hw_auth_gcm` if PHP session expired
+        if (empty($_SESSION['hw_csrf_token'])) {
+            $_SESSION['hw_csrf_token'] = bin2hex(random_bytes(32));
+        }
+
         $authCookie = hw_get_encrypted_cookie('hw_auth_gcm');
         if (empty($_SESSION['username']) && is_array($authCookie)) {
             if (!empty($authCookie['username']) && !empty($authCookie['role'])) {
@@ -181,10 +202,9 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             }
         }
 
-        // Sliding window renewal for User / Veterinarian cookie (renews if >1 hour since last issue)
         if (!empty($_SESSION['username']) && !empty($_SESSION['role']) && !headers_sent()) {
             $lastIssued = is_array($authCookie) ? (int)($authCookie['iat'] ?? 0) : 0;
-            $desiredTtl = is_array($authCookie) ? (int)($authCookie['ttl'] ?? HW_COOKIE_DEFAULT_TTL) : HW_COOKIE_DEFAULT_TTL;
+            $desiredTtl = is_array($authCookie) ? (int)($authCookie['ttl'] ?? HW_COOKIE_REMEMBER_TTL) : HW_COOKIE_REMEMBER_TTL;
             if ($desiredTtl < HW_COOKIE_DEFAULT_TTL) {
                 $desiredTtl = HW_COOKIE_DEFAULT_TTL;
             }
@@ -199,7 +219,6 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             }
         }
 
-        // 2. Auto-restore Admin session from `hw_admin_gcm` if PHP session expired
         $adminCookie = hw_get_encrypted_cookie('hw_admin_gcm');
         if (empty($_SESSION['admin_role']) && is_array($adminCookie)) {
             if (!empty($adminCookie['admin_id']) && !empty($adminCookie['admin_username'])) {
@@ -209,10 +228,12 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             }
         }
 
-        // Sliding window renewal for Admin cookie (renews if >1 hour since last issue)
         if (!empty($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin' && !headers_sent()) {
             $lastAdminIssued = is_array($adminCookie) ? (int)($adminCookie['iat'] ?? 0) : 0;
             $adminTtl = is_array($adminCookie) ? (int)($adminCookie['ttl'] ?? HW_COOKIE_REMEMBER_TTL) : HW_COOKIE_REMEMBER_TTL;
+            if ($adminTtl < HW_COOKIE_REMEMBER_TTL) {
+                $adminTtl = HW_COOKIE_REMEMBER_TTL;
+            }
             if ((time() - $lastAdminIssued) > 3600 && !empty($_SESSION['admin_id'])) {
                 hw_set_encrypted_cookie('hw_admin_gcm', [
                     'admin_id' => (int)$_SESSION['admin_id'],
@@ -225,21 +246,166 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     }
 
     /**
+     * Returns the current session-bound CSRF token.
+     */
+    function hw_csrf_token(): string
+    {
+        hw_start_secure_session();
+        if (empty($_SESSION['hw_csrf_token'])) {
+            $_SESSION['hw_csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return (string)$_SESSION['hw_csrf_token'];
+    }
+
+    /**
+     * Verifies a session-bound CSRF token from parameter, X-CSRF-Token header, $_POST, or JSON body.
+     */
+    function hw_csrf_verify(?string $token = null): bool
+    {
+        hw_start_secure_session();
+        $expected = (string)($_SESSION['hw_csrf_token'] ?? '');
+        if ($expected === '') {
+            return false;
+        }
+
+        $provided = $token;
+        if ($provided === null || $provided === '') {
+            $provided = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null);
+        }
+        if (($provided === null || $provided === '') && stripos((string)($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') !== false) {
+            $raw = @file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && !empty($decoded['csrf_token'])) {
+                    $provided = (string)$decoded['csrf_token'];
+                }
+            }
+        }
+
+        if (!is_string($provided) || $provided === '') {
+            return false;
+        }
+
+        return hash_equals($expected, $provided);
+    }
+
+    /**
+     * Enforces CSRF validation on state-changing HTTP requests.
+     */
+    function hw_require_csrf(): void
+    {
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            if (!hw_csrf_verify()) {
+                http_response_code(403);
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => false,
+                    'status' => 'error',
+                    'message' => 'Invalid or missing CSRF security token. Please refresh the page and try again.',
+                ]);
+                exit;
+            }
+        }
+    }
+
+    /**
+     * Generates a short-lived HMAC-SHA256 signed token for WebSocket authentication.
+     */
+    function hw_generate_ws_token(string $role, int $userId, string $name, array $channels = [], int $ttl = 600): string
+    {
+        $allowedRoles = ['owner', 'vet', 'admin'];
+        if (!in_array($role, $allowedRoles, true)) {
+            throw new InvalidArgumentException('Invalid WebSocket role.');
+        }
+
+        $now = time();
+        $payload = [
+            'role' => $role,
+            'user_id' => $userId,
+            'name' => $name,
+            'channels' => array_values(array_unique(array_filter($channels, 'is_string'))),
+            'iat' => $now,
+            'exp' => $now + max(30, $ttl),
+            'nonce' => bin2hex(random_bytes(8)),
+        ];
+
+        $b64Url = static function (string $bin): string {
+            return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+        };
+
+        $payloadEncoded = $b64Url((string)json_encode($payload));
+        $sig = hash_hmac('sha256', $payloadEncoded, hw_get_master_key(), true);
+        return $payloadEncoded . '.' . $b64Url($sig);
+    }
+
+    /**
+     * Verifies a WebSocket HMAC-SHA256 authentication token and checks expiration.
+     */
+    function hw_verify_ws_token(string $token): ?array
+    {
+        $parts = explode('.', trim($token), 2);
+        if (count($parts) !== 2) {
+            return null;
+        }
+        [$payloadEncoded, $sigEncoded] = $parts;
+        if ($payloadEncoded === '' || $sigEncoded === '') {
+            return null;
+        }
+
+        $b64UrlDecode = static function (string $str): ?string {
+            $pad = strlen($str) % 4;
+            if ($pad > 0) {
+                $str .= str_repeat('=', 4 - $pad);
+            }
+            $bin = base64_decode(strtr($str, '-_', '+/'), true);
+            return $bin === false ? null : $bin;
+        };
+
+        $providedSig = $b64UrlDecode($sigEncoded);
+        $expectedSig = hash_hmac('sha256', $payloadEncoded, hw_get_master_key(), true);
+        if ($providedSig === null || !hash_equals($expectedSig, $providedSig)) {
+            return null;
+        }
+
+        $payloadJson = $b64UrlDecode($payloadEncoded);
+        if ($payloadJson === null) {
+            return null;
+        }
+        $payload = json_decode($payloadJson, true);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $role = $payload['role'] ?? '';
+        $exp = (int)($payload['exp'] ?? 0);
+        if (!in_array($role, ['owner', 'vet', 'admin'], true) || $exp < time()) {
+            return null;
+        }
+
+        return $payload;
+    }
+
+    /**
      * Sets an AES-256-GCM encrypted, authenticated HttpOnly cookie with `iat` and `exp`.
      */
-    function hw_set_encrypted_cookie(string $name, array $payload, int $ttlSeconds = HW_COOKIE_DEFAULT_TTL, bool $httpOnly = true): bool
+    function hw_set_encrypted_cookie(string $name, array $payload, int $ttlSeconds = HW_COOKIE_REMEMBER_TTL, bool $httpOnly = true): bool
     {
         if (headers_sent()) {
             return false;
         }
         $onHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+            || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
         $now = time();
         $payload['iat'] = $now;
         $payload['exp'] = $now + $ttlSeconds;
         $payload['ttl'] = $ttlSeconds;
         $json = json_encode($payload);
-        $encrypted = hw_encrypt_gcm($json, 'cookie:' . $name);
+        try {
+            $encrypted = hw_encrypt_gcm($json, 'cookie:' . $name);
+        } catch (Throwable $e) {
+            return false;
+        }
         if (!$encrypted) {
             return false;
         }
@@ -281,7 +447,7 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     function hw_clear_encrypted_cookie(string $name): void
     {
         $onHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+            || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
         unset($_COOKIE[$name]);
         if (!headers_sent()) {
             @setcookie($name, '', [
@@ -326,9 +492,13 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             @mkdir($cacheDir, 0750, true);
         }
         $safeFile = $cacheDir . '/cache_' . hash('sha256', $cacheKey) . '.gcm';
-        $enc = hw_encrypt_gcm(json_encode($data), 'cache:' . $cacheKey);
-        if ($enc) {
-            @file_put_contents($safeFile, $enc, LOCK_EX);
+        try {
+            $enc = hw_encrypt_gcm(json_encode($data), 'cache:' . $cacheKey);
+            if ($enc) {
+                @file_put_contents($safeFile, $enc, LOCK_EX);
+            }
+        } catch (Throwable $e) {
+            // Skip cache write silently if encryption is unavailable
         }
     }
 

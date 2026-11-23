@@ -1,28 +1,21 @@
 <?php
 /**
- * HealthWing / VetSystem — Dedicated RFC 6455 WebSocket Server (ws_server.php)
- *
- * Zero-dependency native PHP CLI WebSocket Server for:
- * 1. Direct real-time bidirectional Chat (`chat_message`, `typing`, `read_receipt`)
- * 2. Instant WebRTC Video & Voice Call Signaling (`webrtc_offer`, `webrtc_answer`, `webrtc_ice`, `call_ring`, `call_end`)
- * 3. Live Emergency Triage & Schedule Preemption Broadcasts (`emergency_triage_update`, `schedule_update`)
- *
- * Usage:
- *   php ws_server.php [port]
- *   Default port: 8080 (ws://localhost:8080)
+ * HealthWing / VetSystem — Authenticated RFC 6455 WebSocket Server (ws_server.php)
  */
 
 if (php_sapi_name() !== 'cli') {
     header('Content-Type: application/json');
     echo json_encode([
-        'service'=>'HealthWing WebSocket Hub',
-        'usage'=>'Run `php ws_server.php`in terminal or double-click start_websocket.bat',
-        'default_port'=>8080,
+        'service' => 'HealthWing WebSocket Hub',
+        'usage' => 'Run `php ws_server.php` in terminal or launch start_websocket.bat',
+        'default_port' => 8080,
     ]);
     exit;
 }
 
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/security_crypto.php';
+// Ensure the shared master key can be loaded/created cleanly
+hw_get_master_key();
 
 $port = isset($argv[1]) ? (int)$argv[1] : 8080;
 $address = '0.0.0.0';
@@ -36,12 +29,12 @@ stream_set_blocking($serverSocket, false);
 
 echo "============================================================\n";
 echo "HealthWing VetSystem WebSocket Hub running on ws://{$address}:{$port}\n";
-echo "Supporting: Real-Time Video/Audio Signaling, Chat & Triage\n";
+echo "Supporting: HMAC-Authenticated Real-Time Video/Audio, Chat & Triage\n";
 echo "============================================================\n";
 
-/** @var array<int, resource>$clients */
+/** @var array<int, resource> $clients */
 $clients = [];
-/** @var array<int, array>$clientMeta */
+/** @var array<int, array> $clientMeta */
 $clientMeta = [];
 
 function ws_encode_frame(string $payload, int $opcode = 0x1): string
@@ -107,7 +100,7 @@ function ws_decode_frames(string &$buffer): array
             $data = $unmasked;
         }
 
-        $messages[] = ['opcode'=>$opcode, 'payload'=>$data];
+        $messages[] = ['opcode' => $opcode, 'payload' => $data];
     }
     return $messages;
 }
@@ -127,21 +120,39 @@ function ws_perform_handshake($client, string $headers): bool
     return true;
 }
 
+function ws_channel_authorized(array $meta, string $channel): bool
+{
+    if (empty($meta['authenticated']) || time() > (int)($meta['token_exp'] ?? 0)) {
+        return false;
+    }
+    $role = $meta['role'] ?? 'guest';
+    if ($role === 'vet' || $role === 'admin') {
+        return true;
+    }
+    if ($role === 'owner') {
+        $allowed = $meta['allowed_channels'] ?? [];
+        return in_array($channel, $allowed, true);
+    }
+    return false;
+}
+
 function ws_broadcast(array $clients, array $clientMeta, array $packet, ?string $channelFilter = null, ?int $excludeId = null): void
 {
-    $frame = ws_encode_frame(json_encode($packet));
-    foreach ($clients as $id =>$sock) {
+    $frame = ws_encode_frame((string)json_encode($packet));
+    foreach ($clients as $id => $sock) {
         if ($excludeId !== null && $id === $excludeId) {
             continue;
         }
-        if (empty($clientMeta[$id]['handshaked'])) {
+        if (empty($clientMeta[$id]['handshaked']) || empty($clientMeta[$id]['authenticated'])) {
+            continue;
+        }
+        if (time() > (int)($clientMeta[$id]['token_exp'] ?? 0)) {
             continue;
         }
         if ($channelFilter !== null) {
             $subs = $clientMeta[$id]['channels'] ?? [];
-            $role = $clientMeta[$id]['role'] ?? '';
-            // Vets and admins receive all clinic channel events; owners receive subscribed channels
-            if ($role !== 'vet'&& $role !== 'admin'&& !in_array($channelFilter, $subs, true)) {
+            $role = $clientMeta[$id]['role'] ?? 'guest';
+            if ($role !== 'vet' && $role !== 'admin' && !in_array($channelFilter, $subs, true)) {
                 continue;
             }
         }
@@ -166,12 +177,15 @@ while (true) {
             $id = (int)$newSock;
             $clients[$id] = $newSock;
             $clientMeta[$id] = [
-                'handshaked'=> false,
-                'buffer'=>'',
-                'role'=>'guest',
-                'user_id'=> null,
-                'name'=>'Visitor',
-                'channels'=>[],
+                'handshaked' => false,
+                'authenticated' => false,
+                'buffer' => '',
+                'role' => 'guest',
+                'user_id' => null,
+                'name' => 'Visitor',
+                'channels' => [],
+                'allowed_channels' => [],
+                'token_exp' => 0,
             ];
         }
         unset($read[array_search($serverSocket, $read, true)]);
@@ -180,7 +194,7 @@ while (true) {
     foreach ($read as $sock) {
         $id = (int)$sock;
         $chunk = @fread($sock, 65535);
-        if ($chunk === ''|| $chunk === false) {
+        if ($chunk === '' || $chunk === false) {
             if (feof($sock)) {
                 @fclose($sock);
                 unset($clients[$id], $clientMeta[$id]);
@@ -194,9 +208,10 @@ while (true) {
                 if (ws_perform_handshake($sock, $clientMeta[$id]['buffer'])) {
                     $clientMeta[$id]['handshaked'] = true;
                     $clientMeta[$id]['buffer'] = '';
-                    @fwrite($sock, ws_encode_frame(json_encode([
-                        'type'=>'connected',
-                        'timestamp'=> date('c'),
+                    @fwrite($sock, ws_encode_frame((string)json_encode([
+                        'type' => 'connected',
+                        'auth_required' => true,
+                        'timestamp' => date('c'),
                     ])));
                 } else {
                     @fclose($sock);
@@ -212,13 +227,11 @@ while (true) {
         foreach ($frames as $frame) {
             $op = $frame['opcode'];
             if ($op === 0x8) {
-                // Close frame
                 @fclose($sock);
                 unset($clients[$id], $clientMeta[$id]);
                 break;
             }
             if ($op === 0x9) {
-                // Ping ->Pong
                 @fwrite($sock, ws_encode_frame($frame['payload'], 0xA));
                 continue;
             }
@@ -231,78 +244,114 @@ while (true) {
                 continue;
             }
 
-            switch ($msg['type']) {
-                case 'auth':
-                    $clientMeta[$id]['role'] = $msg['role'] ?? 'guest';
-                    $clientMeta[$id]['user_id'] = $msg['user_id'] ?? null;
-                    $clientMeta[$id]['name'] = $msg['name'] ?? 'User';
-                    if (!empty($msg['channels']) && is_array($msg['channels'])) {
-                        $clientMeta[$id]['channels'] = array_values(array_unique($msg['channels']));
-                    }
-                    break;
+            if ($msg['type'] === 'auth') {
+                $token = trim((string)($msg['token'] ?? ''));
+                $claims = $token !== '' ? hw_verify_ws_token($token) : null;
+                if ($claims === null) {
+                    $clientMeta[$id]['authenticated'] = false;
+                    $clientMeta[$id]['role'] = 'guest';
+                    @fwrite($sock, ws_encode_frame((string)json_encode([
+                        'type' => 'auth_error',
+                        'message' => 'Invalid or expired WebSocket authentication token.',
+                    ])));
+                    continue;
+                }
 
+                $clientMeta[$id]['authenticated'] = true;
+                $clientMeta[$id]['role'] = (string)$claims['role'];
+                $clientMeta[$id]['user_id'] = (int)($claims['user_id'] ?? 0);
+                $clientMeta[$id]['name'] = (string)($claims['name'] ?? 'User');
+                $allowedCh = is_array($claims['channels'] ?? null) ? array_values(array_unique($claims['channels'])) : [];
+                $clientMeta[$id]['allowed_channels'] = $allowedCh;
+                $clientMeta[$id]['channels'] = $allowedCh;
+                $clientMeta[$id]['token_exp'] = (int)$claims['exp'];
+
+                @fwrite($sock, ws_encode_frame((string)json_encode([
+                    'type' => 'auth_ok',
+                    'role' => $clientMeta[$id]['role'],
+                    'user_id' => $clientMeta[$id]['user_id'],
+                    'expires_at' => $clientMeta[$id]['token_exp'],
+                ])));
+                continue;
+            }
+
+            if (empty($clientMeta[$id]['authenticated']) || time() > (int)$clientMeta[$id]['token_exp']) {
+                @fwrite($sock, ws_encode_frame((string)json_encode([
+                    'type' => 'auth_error',
+                    'message' => 'Authentication required before sending WebSocket events.',
+                ])));
+                continue;
+            }
+
+            switch ($msg['type']) {
                 case 'subscribe':
-                    $ch = trim($msg['channel_key'] ?? '');
-                    if ($ch !== ''&& !in_array($ch, $clientMeta[$id]['channels'], true)) {
-                        $clientMeta[$id]['channels'][] = $ch;
+                    $ch = trim((string)($msg['channel_key'] ?? ''));
+                    if ($ch !== '' && ws_channel_authorized($clientMeta[$id], $ch)) {
+                        if (!in_array($ch, $clientMeta[$id]['channels'], true)) {
+                            $clientMeta[$id]['channels'][] = $ch;
+                        }
                     }
                     break;
 
                 case 'chat_message':
-                    $ch = trim($msg['channel_key'] ?? '');
-                    $text = trim($msg['message_text'] ?? '');
-                    if ($ch === ''|| $text === '') {
+                    $ch = trim((string)($msg['channel_key'] ?? ''));
+                    $text = trim((string)($msg['message_text'] ?? ''));
+                    if ($ch === '' || $text === '' || !ws_channel_authorized($clientMeta[$id], $ch)) {
                         break;
                     }
-                    // Broadcast immediately to all channel participants
                     ws_broadcast($clients, $clientMeta, [
-                        'type'=>'chat_message',
-                        'channel_key'=>$ch,
-                        'message'=>$msg['message'] ?? [
-                            'Channel_Key'=>$ch,
-                            'Sender_Role'=>$clientMeta[$id]['role'],
-                            'Sender_ID'=>$clientMeta[$id]['user_id'],
-                            'Sender_Name'=>$clientMeta[$id]['name'],
-                            'Message_Text'=>$text,
-                            'Message_Type'=>$msg['message_type'] ?? 'text',
-                            'Created_At'=> date('Y-m-d H:i:s'),
+                        'type' => 'chat_message',
+                        'channel_key' => $ch,
+                        'message' => [
+                            'Channel_Key' => $ch,
+                            'Sender_Role' => $clientMeta[$id]['role'],
+                            'Sender_ID' => $clientMeta[$id]['user_id'],
+                            'Sender_Name' => $clientMeta[$id]['name'],
+                            'Message_Text' => $text,
+                            'Message_Type' => in_array($msg['message_type'] ?? 'text', ['text', 'system_alert', 'triage_notice', 'call_event'], true) ? $msg['message_type'] : 'text',
+                            'Created_At' => date('Y-m-d H:i:s'),
                         ],
                     ], $ch);
                     break;
 
                 case 'typing':
-                    $ch = trim($msg['channel_key'] ?? '');
-                    if ($ch !== '') {
+                    $ch = trim((string)($msg['channel_key'] ?? ''));
+                    if ($ch !== '' && ws_channel_authorized($clientMeta[$id], $ch)) {
                         ws_broadcast($clients, $clientMeta, [
-                            'type'=>'typing',
-                            'channel_key'=>$ch,
-                            'sender_name'=>$clientMeta[$id]['name'],
-                            'sender_role'=>$clientMeta[$id]['role'],
+                            'type' => 'typing',
+                            'channel_key' => $ch,
+                            'sender_name' => $clientMeta[$id]['name'],
+                            'sender_role' => $clientMeta[$id]['role'],
                         ], $ch, $id);
                     }
                     break;
 
                 case 'webrtc_signal':
-                    // Instant low-latency relay for WebRTC offer, answer, ICE candidates, and call ring/end
-                    $ch = !empty($msg['booking_id']) ? ('booking_'. (int)$msg['booking_id']) : null;
+                    $bookingId = !empty($msg['booking_id']) ? (int)$msg['booking_id'] : null;
+                    $ch = $bookingId ? ('booking_' . $bookingId) : null;
+                    if ($ch !== null && !ws_channel_authorized($clientMeta[$id], $ch)) {
+                        break;
+                    }
                     ws_broadcast($clients, $clientMeta, [
-                        'type'=>'webrtc_signal',
-                        'signal_type'=>$msg['signal_type'] ?? 'ice',
-                        'booking_id'=>$msg['booking_id'] ?? null,
-                        'call_id'=>$msg['call_id'] ?? null,
-                        'call_type'=>$msg['call_type'] ?? 'video',
-                        'sender_role'=>$clientMeta[$id]['role'],
-                        'sender_name'=>$clientMeta[$id]['name'],
-                        'payload'=>$msg['payload'] ?? null,
+                        'type' => 'webrtc_signal',
+                        'signal_type' => $msg['signal_type'] ?? 'ice',
+                        'booking_id' => $bookingId,
+                        'call_id' => $msg['call_id'] ?? null,
+                        'call_type' => $msg['call_type'] ?? 'video',
+                        'sender_role' => $clientMeta[$id]['role'],
+                        'sender_name' => $clientMeta[$id]['name'],
+                        'payload' => $msg['payload'] ?? null,
                     ], $ch, $id);
                     break;
 
                 case 'triage_broadcast':
-                    // Broadcast emergency queue reordering or schedule preemption to all online vets, admins, and owners
+                    if (!in_array($clientMeta[$id]['role'], ['vet', 'admin'], true)) {
+                        break;
+                    }
                     ws_broadcast($clients, $clientMeta, [
-                        'type'=>'triage_broadcast',
-                        'timestamp'=> date('c'),
-                        'summary'=>$msg['summary'] ?? null,
+                        'type' => 'triage_broadcast',
+                        'timestamp' => date('c'),
+                        'summary' => $msg['summary'] ?? null,
                     ]);
                     break;
             }

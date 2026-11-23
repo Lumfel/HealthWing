@@ -6,12 +6,11 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base href="/">
     <meta charset="UTF-8"/>
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
-    <link href="vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
-    <script src="vendor/tailwind/tailwind-browser.js"></script>
-    <script src="vendor/motion/motion.js"></script>
+    <link href="api/asset_proxy.php?f=vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
+    <script src="api/asset_proxy.php?f=vendor/tailwind/tailwind-browser.js"></script>
+    <script src="api/asset_proxy.php?f=vendor/motion/motion.js"></script>
     <script>
     const { animate, scroll } = Motion
     </script>
@@ -24,7 +23,7 @@
   <body>
    <?php include __DIR__ . '/includes/navbar.php'; ?>
 
-<div class="relative w-full h-105 bg-cover bg-center flex items-center justify-center" style="background-image: url('images/aboutpage.jpg');">
+<div class="relative w-full h-105 bg-cover bg-center flex items-center justify-center" style="background-image: url('assets/images/aboutpage.jpg');">
   <div class="text-center p-6 rounded-lg max-w-2xl">
     <h1 class="text-5xl font-extrabold text-white">Our Veterinary Team</h1>
     <p class="text-2xl text-white mt-4">Meet the team of HealthWing</p>
@@ -82,25 +81,25 @@ At the heart of our veterinary practice is a deep commitment to the well-being o
 </script>
 
 <section class="py-12 px-4 bg-[#89cbdf] text-center">
-  <img src="images/dev-icon.png" alt="Developer Icon" class="mx-auto mb-4 w-16 h-16">
+  <img src="assets/images/dev-icon.png" alt="Developer Icon" class="mx-auto mb-4 w-16 h-16">
   <h2 class="text-4xl font-bold text-gray-800 mb-10">Meet the Developers</h2>
 
   <div class="flex flex-col md:flex-row justify-center items-center gap-10">
 
     <div class="flex flex-col items-center">
-      <img src="images/dev1.jpg" alt="Developer 1" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
+      <img src="assets/images/dev1.jpg" alt="Developer 1" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
       <h3 class="text-xl font-semibold text-white">Jesryl John Alacapa</h3>
       <p class="text-sm text-blue-100">Frontend Developer</p>
     </div>
 
     <div class="flex flex-col items-center">
-      <img src="images/dev2.jpg" alt="Developer 2" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
+      <img src="assets/images/dev2.jpg" alt="Developer 2" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
       <h3 class="text-xl font-semibold text-white">Paul Felippe Tibo-oc</h3>
       <p class="text-sm text-blue-100">Backend Developer</p>
     </div>
 
     <div class="flex flex-col items-center">
-      <img src="images/dev3.jpg" alt="Developer 3" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
+      <img src="assets/images/dev3.jpg" alt="Developer 3" class="w-40 h-40 rounded-full object-cover shadow-lg mb-4">
       <h3 class="text-xl font-semibold text-white">Christian Barbas Jr.</h3>
       <p class="text-sm text-blue-100">Backend Developer</p>
     </div>
@@ -140,6 +139,7 @@ At the heart of our veterinary practice is a deep commitment to the well-being o
 <div id="emergency-booking" class="bg-gray-100 p-6 rounded-lg shadow-md mt-10 mx-auto w-2/3">
     <h3 class="text-xl font-bold text-gray-700 text-center mb-4">Emergency Booking</h3>
     <form action="submit_emergency.php" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
         <div class="flex flex-col">
             <label class="font-semibold text-gray-700">Name</label>
             <input type="text" name="name" class="border border-gray-300 p-2 rounded-lg" placeholder="Enter your name"required>
@@ -174,7 +174,7 @@ At the heart of our veterinary practice is a deep commitment to the well-being o
         <div class="md:flex md:justify-between">
           <div class="mb-6 md:mb-0">
               <a class="flex items-center">
-                  <img src="images/logo.png" class="h-8 me-3" alt="Logo"/>
+                  <img src="assets/images/logo.png" class="h-8 me-3" alt="Logo"/>
                   <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">HealthWing</span>
               </a>
           </div>
@@ -225,18 +225,19 @@ At the heart of our veterinary practice is a deep commitment to the well-being o
                 userSection.innerHTML = `
                     <span class="text-white font-semibold text-lg">Welcome, ${data.username}!</span>
                     <form action="logout.php" method="post" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
         <button type="submit" class="text-red-500 hover:underline ml-4">Logout</button>
     </form>
                 `;
             } else {
                 userSection.innerHTML = `
                     <div class="flex items-center md:order-2 space-x-4 md:space-x-6 rtl:space-x-reverse">
-                    <a href="chooserole.html">
+                    <a href="choose_role.php">
                         <div class="flex space-x-1">
                             <button class="py-2 px-4 text-gray-900 rounded-lg hover:bg-gray-100 md:hover:bg-transparent md:hover:text-blue-700 dark:text-white md:dark:hover:text-[#DBE48C] dark:hover:bg-gray-700 dark:hover:text-white md:dark:hover:bg-transparent dark:border-gray-700 hover:border-blue-700 md:dark:hover:border-[#DBE48C] transition-all duration-300">Sign Up
                             </button>
                     </a>
-                    <a href="Sign in html.html">
+                    <a href="login.php">
                             <button class="px-4 py-2 text-white bg-[#DBE48C] rounded-lg transition-all duration-300 hover:bg-[#c6d674] hover:shadow-lg">Sign In
                             </button>
                     </a>
@@ -249,7 +250,7 @@ At the heart of our veterinary practice is a deep commitment to the well-being o
 });
     </script>
     </h1>
-    <script src="vendor/flowbite/flowbite.min.js"></script>
-    <script src="JS.js"></script>
+    <script src="api/asset_proxy.php?f=vendor/flowbite/flowbite.min.js"></script>
+    <script src="api/asset_proxy.php?f=assets/js/JS.js"></script>
   </body>
 </html>

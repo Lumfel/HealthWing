@@ -1,16 +1,5 @@
 /**
- * HWCall & HWComm — Unified WebSocket + WebRTC Video/Voice + Real-Time Chat Hub (v2.0)
- *
- * Capabilities:
- * 1. Connects to the native RFC 6455 WebSocket server (`ws://<host>:8080`) for instant:
- *    - Bidirectional text chat (`chat_message`) + typing indicators (`typing`)
- *    - Low-latency WebRTC video/audio call signaling (`webrtc_signal`: offer/answer/ICE/hangup)
- *    - Live emergency triage queue & schedule preemption broadcasts (`triage_broadcast`)
- * 2. Automatically persists every chat message and call state to MySQL via `api/chat_api.php`
- *    and `call_*.php`, providing seamless zero-config fallback if the CLI WebSocket daemon is not running.
- * 3. Renders both:
- *    - Floating / slide-over Real-Time Clinic Chat Drawer (multi-channel: Emergency cases, Appointments, Direct Care Team)
- *    - Full WebRTC Video/Audio Call Modal with an integrated live chat sidebar during calls.
+ * HWCall & HWComm - Unified WebSocket + WebRTC Video/Voice + Real-Time Chat Hub
  */
 (function (global) {
     const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302'}];
@@ -22,6 +11,7 @@
 
     let myRole = null; // 'owner'| 'vet'| 'admin'
     let myActor = null;
+    let myWsToken = null;
     const watched = new Map(); // bookingId ->label
     let incomingTimer = null;
     let incomingIndex = 0;
@@ -77,13 +67,10 @@
         ws.onopen = function () {
             wsConnected = true;
             updateWsBadge(true);
-            if (myActor) {
+            if (myWsToken) {
                 wsSend({
                     type: 'auth',
-                    role: myActor.role,
-                    user_id: myActor.id,
-                    name: myActor.name,
-                    channels: channels.map(c => c.channel_key),
+                    token: myWsToken,
                 });
             }
             if (currentChannelKey) {
@@ -149,12 +136,11 @@
         const badge = document.getElementById('hwWsStatusBadge');
         if (!badge) return;
         if (isLive) {
-            badge.textContent = '● WebSocket Live';
+            badge.textContent = 'WebSocket Live';
             badge.style.background = '#174E36';
-            badge.style.color = '#7RF2B8';
             badge.style.color = '#6EE7B7';
         } else {
-            badge.textContent = '● Hybrid Real-Time Sync';
+            badge.textContent = 'Hybrid Real-Time Sync';
             badge.style.background = '#1E3A4C';
             badge.style.color = '#93C5FD';
         }
@@ -225,7 +211,7 @@
             <div>
               <div style="font-weight:800;font-size:14.5px;display:flex;align-items:center;gap:8px;">
                 <span>HealthWing Comm Hub</span>
-                <span id="hwWsStatusBadge" style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:#1E3A4C;color:#93C5FD;font-weight:600;">● Connecting</span>
+                <span id="hwWsStatusBadge" style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:#1E3A4C;color:#93C5FD;font-weight:600;">Connecting</span>
               </div>
               <div style="font-size:11.5px;color:#9FBEC0;margin-top:2px;">Direct WebSocket Chat & WebRTC Video/Voice</div>
             </div>
@@ -340,6 +326,7 @@
             if (!data.success) return;
 
             myActor = data.actor;
+            myWsToken = data.ws_token || null;
             channels = data.channels || [];
             const sel = document.getElementById('hwChannelSelect');
             if (channels.length === 0) {

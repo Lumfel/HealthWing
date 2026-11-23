@@ -8,12 +8,11 @@ $username = $isLoggedIn ? $_SESSION['username'] : null;
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/">
     <meta charset="UTF-8"/>
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
     <title>Contact & Direct Video Consult | HealthWing</title>
-    <link href="vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
-    <script src="vendor/tailwind/tailwind-browser.js"></script>
+    <link href="api/asset_proxy.php?f=vendor/flowbite/flowbite.min.css" rel="stylesheet"/>
+    <script src="api/asset_proxy.php?f=vendor/tailwind/tailwind-browser.js"></script>
 </head>
 <body class="bg-[#F4F9FA] text-[#16262A]">
 <?php include __DIR__ . '/includes/navbar.php'; ?>
@@ -26,19 +25,19 @@ $username = $isLoggedIn ? $_SESSION['username'] : null;
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col items-center text-center">
-            <img src="images/location.png" alt="Address Icon" class="w-14 h-14 mb-3">
+            <img src="assets/images/location.png" alt="Address Icon" class="w-14 h-14 mb-3">
             <h3 class="text-lg font-bold mb-1 text-gray-800">Clinic Address</h3>
             <p class="text-sm text-gray-600">Along Circumferential Road, Bacolod City</p>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col items-center text-center">
-            <img src="images/phone.png" alt="Phone Icon" class="w-14 h-14 mb-3">
+            <img src="assets/images/phone.png" alt="Phone Icon" class="w-14 h-14 mb-3">
             <h3 class="text-lg font-bold mb-1 text-gray-800">Emergency Hotline</h3>
             <p class="text-sm text-gray-600">(00)-0000-0000</p>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col items-center text-center">
-            <img src="images/gmail.png" alt="Email Icon" class="w-14 h-14 mb-3">
+            <img src="assets/images/gmail.png" alt="Email Icon" class="w-14 h-14 mb-3">
             <h3 class="text-lg font-bold mb-1 text-gray-800">Email</h3>
             <p class="text-sm text-gray-600">contact@healthwingclinic.com</p>
         </div>

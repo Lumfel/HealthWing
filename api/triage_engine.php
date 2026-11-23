@@ -52,6 +52,7 @@ try {
     }
 
     if ($action === 'set_severity') {
+        hw_require_csrf();
         $isVet = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian';
         $isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';
         if (!$isVet && !$isAdmin) {

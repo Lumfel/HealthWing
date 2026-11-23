@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/call_common.php';
 require_once __DIR__ . '/rate_limit.php';
+require_once __DIR__ . '/includes/db.php';
 rate_limit_check('call_start', 20, 60);
 
 header('Content-Type: application/json');
@@ -10,17 +11,20 @@ if (!$role) {
     call_fail('You must be signed in to start a call.', 401);
 }
 
+hw_require_csrf();
+
 $data = json_decode(file_get_contents('php://input'), true) ?? [];
 $bookingId = isset($data['booking_id']) ? (int)$data['booking_id'] : 0;
-$callType = ($data['call_type'] ?? 'video') === 'audio'? 'audio': 'video';
-$offerSdp = trim($data['sdp_offer'] ?? '');
+$callType = ($data['call_type'] ?? 'video') === 'audio' ? 'audio' : 'video';
+$offerSdp = trim((string)($data['sdp_offer'] ?? ''));
 
 if (!$bookingId || $offerSdp === '') {
     call_fail('Missing booking id or call offer.');
 }
 
-$conn = new mysqli('localhost', 'root', '', 'veterinarydb');
-if ($conn->connect_error) {
+try {
+    $conn = hw_get_db();
+} catch (Throwable $e) {
     call_fail('Database connection failed.', 500);
 }
 
@@ -43,23 +47,16 @@ if (in_array($booking['Status'], ['Completed', 'Cancelled'], true)) {
     call_fail('This emergency has already been resolved, so calling is no longer available.');
 }
 
-// The owner can only call if a vet has explicitly enabled the feature for
-// this specific emergency. The vet is never blocked from calling the owner.
-if ($role === 'owner'&& (int)$booking['Call_Enabled'] !== 1) {
+if ($role === 'owner' && (int)$booking['Call_Enabled'] !== 1) {
     $conn->close();
     call_fail('The call feature has not been enabled for this emergency yet.');
 }
 
-// If a case doesn't have an Owner_ID (a guest submitted it without an
-// account), there is no logged-in owner session to ring — the vet should
-// use the phone number on the booking instead.
-if ($role === 'vet'&& $booking['Owner_ID'] === null) {
+if ($role === 'vet' && $booking['Owner_ID'] === null) {
     $conn->close();
-    call_fail('This request has no linked account to call — use the phone number on file instead.');
+    call_fail('This request has no linked account to call - use the phone number on file instead.');
 }
 
-// Reuse an existing ringing/active call for this booking rather than
-// stacking up duplicates if someone double-clicks "Call".
 $existing = $conn->prepare(
     "SELECT Call_ID FROM call_session WHERE Booking_ID = ? AND Status IN ('ringing','active') ORDER BY Call_ID DESC LIMIT 1"
 );
@@ -70,7 +67,7 @@ $existing->close();
 
 if ($existingRow) {
     $conn->close();
-    echo json_encode(['success'=> true, 'call_id'=>(int)$existingRow['Call_ID'], 'reused'=> true]);
+    echo json_encode(['success' => true, 'call_id' => (int)$existingRow['Call_ID'], 'reused' => true]);
     exit();
 }
 
@@ -86,10 +83,10 @@ $callId = $stmt->insert_id;
 $stmt->close();
 $conn->close();
 
-rate_limit_log_event('call_initiated_'. $callType, 'allowed');
+rate_limit_log_event('call_initiated_' . $callType, 'allowed');
 
 if ($ok) {
-    echo json_encode(['success'=> true, 'call_id'=>$callId]);
+    echo json_encode(['success' => true, 'call_id' => $callId]);
 } else {
     call_fail('Could not start the call. Please try again.', 500);
 }

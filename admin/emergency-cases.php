@@ -6,20 +6,20 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="/admin/">
     <meta charset="UTF-8">
     <meta name="viewport" content=" width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="dashboard.css">
+    <meta name="hw-csrf-token" content="<?php echo htmlspecialchars(hw_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="../api/asset_proxy.php?f=admin/dashboard.css">
     <title>Emergency Priority Triage · HealthWing Admin</title>
-    <link rel="stylesheet" href="../bone-loader.css">
-    <script src="../bone-loader.js"defer></script>
+    <link rel="stylesheet" href="../api/asset_proxy.php?f=assets/css/loader.css">
+    <script src="../api/asset_proxy.php?f=assets/js/loader.js" defer></script>
 </head>
 <body class="admin-body">
     <button id="toggleDashboard1"></button>
 
     <aside class="side" id="dashboard">
         <div class="brand">
-            <img src="../images/logo.png" width="26" height="26" alt="HealthWing logo" style="border-radius: 6px;"/>
+            <img src="../assets/images/logo.png" width="26" height="26" alt="HealthWing logo" style="border-radius: 6px;"/>
             <div class="brand-text">
                 <strong>HealthWing</strong>
                 <span>Admin panel</span>
@@ -39,6 +39,10 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
             <a href="pet-records.php">Pet Records</a>
             <a href="network-monitor.php">Network Monitor</a>
             <a href="client-history.php">Client History</a>
+            <a href="../receipts.php">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+                Receipts
+            </a>
         </nav>
 
         <div class="exit-row">

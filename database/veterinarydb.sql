@@ -1,9 +1,9 @@
 -- ============================================================================
--- HealthWing / VetSystem — Clean Rebuilt Database Schema & Seed (veterinarydb.sql)
+-- HealthWing / VetSystem — Database Schema & Seed (database/veterinarydb.sql)
 -- ============================================================================
 -- Includes:
---   - All 14 normalized & overhauled InnoDB tables (utf8mb4)
---   - All legacy/junk rows removed — seeded with 1 User (Owner), 1 Veterinarian, 1 Admin
+--   - Normalized InnoDB tables (utf8mb4) including receipt_blocks
+--   - Seeded with 1 User (Owner), 1 Veterinarian, 1 Admin
 --   - 5 Specialized Clinic Rooms, 1 Sample Pet, 1 Checkup, 1 Scheduled Visit, 1 Triage Case
 --
 -- Default Seed Login Credentials:
@@ -20,6 +20,7 @@ SET time_zone = "+00:00";
 CREATE DATABASE IF NOT EXISTS `veterinarydb` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `veterinarydb`;
 
+DROP TABLE IF EXISTS `receipt_blocks`;
 DROP TABLE IF EXISTS `call_ice_candidate`;
 DROP TABLE IF EXISTS `call_session`;
 DROP TABLE IF EXISTS `chat_messages`;
@@ -353,6 +354,33 @@ CREATE TABLE `chat_messages` (
 INSERT INTO `chat_messages` (`Message_ID`, `Channel_Key`, `Booking_ID`, `Sender_Role`, `Sender_ID`, `Sender_Name`, `Message_Text`, `Message_Type`, `Is_Read`) VALUES
 (1, 'booking_1', 1, 'vet', 1, 'Dr. Camille Reyes', 'Mochi is stable in Emergency Trauma Bay 1. Antihistamine administered and swelling is subsiding.', 'text', 1),
 (2, 'booking_1', 1, 'owner', 1, 'Leanne Chua', 'Thank you so much, Doctor. I am in the waiting area now.', 'text', 1);
+
+-- 15. Table: receipt_blocks
+CREATE TABLE `receipt_blocks` (
+  `Block_ID` int(11) NOT NULL AUTO_INCREMENT,
+  `Block_Index` int(11) NOT NULL,
+  `Receipt_Code` varchar(64) NOT NULL,
+  `Owner_ID` int(11) DEFAULT NULL,
+  `Reference_Type` varchar(32) NOT NULL DEFAULT 'schedule',
+  `Reference_ID` int(11) DEFAULT NULL,
+  `Service_Summary` varchar(255) NOT NULL,
+  `Amount` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Currency` varchar(10) NOT NULL DEFAULT 'PHP',
+  `Merkle_Root` char(64) NOT NULL,
+  `Prev_Hash` char(64) NOT NULL,
+  `Block_Hash` char(64) NOT NULL,
+  `Payload_Ciphertext` mediumtext NOT NULL,
+  `Archive_Filename` varchar(128) DEFAULT NULL,
+  `Issued_By` varchar(100) NOT NULL,
+  `Created_At` datetime NOT NULL,
+  `Expires_At` datetime NOT NULL,
+  PRIMARY KEY (`Block_ID`),
+  UNIQUE KEY `uniq_receipt_code` (`Receipt_Code`),
+  UNIQUE KEY `uniq_block_index` (`Block_Index`),
+  KEY `idx_owner_id` (`Owner_ID`),
+  KEY `idx_ref` (`Reference_Type`, `Reference_ID`),
+  KEY `idx_expires_at` (`Expires_At`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
 COMMIT;

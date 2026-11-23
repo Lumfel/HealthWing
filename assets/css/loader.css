@@ -1,14 +1,5 @@
 /**
- * HealthWing / VetSystem — Bone Loading & Mobile-First Responsive System (bone-loader.css)
- *
- * Provides:
- * 1. Skeleton "Bone"Shimmer Placeholders (.hw-bone, .hw-bone-shape, .hw-bone-card)
- * 2. Animated SVG Dog-Bone Spinner & Overlay (#hwBoneOverlay, #hwTopBoneBar)
- * 3. Comprehensive Mobile Responsiveness (< 768px) for both User (Pet Owner) and Veterinarian portals:
- *    - Collapsible mobile top menu + sticky 1-thumb Mobile Bottom Navigation Dock (.hw-mobile-bottom-dock)
- *    - Mobile card-stack layout for wide tables (.data-table)
- *    - Responsive 2-column calendar grid on phones (.cal-grid)
- *    - Full-screen mobile-friendly Chat Drawer (#hwChatDrawer) and Video Call Modal (#hwCallModal)
+ * HealthWing / VetSystem — Loading & Mobile-First Responsive System (assets/css/loader.css)
  */
 
 :root {
@@ -18,7 +9,7 @@
     --hw-bone-dark: #1F3A3D;
 }
 
-/* ---------- 1. Shimmering Skeleton "Bone"Primitives ---------- */
+/* ---------- 1. Skeleton Placeholder Primitives ---------- */
 @keyframes hwBoneShimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
@@ -96,7 +87,7 @@
     justify-content: center;
 }
 
-/* ---------- 2. Animated SVG Dog-Bone Spinner & Overlay ---------- */
+/* ---------- 2. Animated Spinner & Overlay ---------- */
 .hw-bone-inline-loader {
     display: inline-flex;
     align-items: center;

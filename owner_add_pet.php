@@ -3,14 +3,16 @@
  * HealthWing / VetSystem — Owner Add Pet Endpoint with AES-256-GCM Encryption & Cache Invalidation (owner_add_pet.php)
  */
 require_once __DIR__ . '/includes/db.php';
-
+hw_start_secure_session();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
     http_response_code(401);
-    echo json_encode(['success'=> false, 'message'=>'Please sign in as a pet owner.']);
+    echo json_encode(['success' => false, 'message' => 'Please sign in as a pet owner.']);
     exit;
 }
+
+hw_require_csrf();
 
 try {
     $conn = hw_get_db();
@@ -21,22 +23,22 @@ try {
     $stmt->close();
 
     if (!$row) {
-        echo json_encode(['success'=> false, 'message'=>'Owner account not found.']);
+        echo json_encode(['success' => false, 'message' => 'Owner account not found.']);
         $conn->close();
         exit;
     }
     $ownerId = (int)$row['Owner_ID'];
 
     $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
-    $petName = trim($input['pet_name'] ?? '');
-    $species = trim($input['species'] ?? 'Dog');
-    $breed = trim($input['pet_type'] ?? $species);
-    $age = isset($input['age']) && $input['age'] !== ''? (int)$input['age'] : null;
-    $description = hw_encrypt_gcm(trim($input['description'] ?? ''));
-    $pastConditions = hw_encrypt_gcm(trim($input['past_conditions'] ?? ''));
+    $petName = trim((string)($input['pet_name'] ?? ''));
+    $species = trim((string)($input['species'] ?? 'Dog'));
+    $breed = trim((string)($input['pet_type'] ?? $species));
+    $age = isset($input['age']) && $input['age'] !== '' ? (int)$input['age'] : null;
+    $description = hw_encrypt_gcm(trim((string)($input['description'] ?? '')));
+    $pastConditions = hw_encrypt_gcm(trim((string)($input['past_conditions'] ?? '')));
 
     if ($petName === '') {
-        echo json_encode(['success'=> false, 'message'=>'Pet name is required.']);
+        echo json_encode(['success' => false, 'message' => 'Pet name is required.']);
         $conn->close();
         exit;
     }
@@ -51,10 +53,9 @@ try {
     $ins->close();
     $conn->close();
 
-    // Invalidate AES-256-GCM pet cache for this owner so new pet shows immediately
-    hw_cache_invalidate('owner_pets_'. $ownerId);
+    hw_cache_invalidate('owner_pets_' . $ownerId);
 
-    echo json_encode(['success'=>$ok, 'pet_id'=>$newPetId, 'cipher'=>'AES-256-GCM']);
+    echo json_encode(['success' => $ok, 'pet_id' => $newPetId, 'cipher' => 'AES-256-GCM']);
 } catch (Throwable $e) {
-    echo json_encode(['success'=> false, 'message'=>'Could not add pet.']);
+    echo json_encode(['success' => false, 'message' => 'Could not add pet.']);
 }
