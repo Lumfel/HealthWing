@@ -7,26 +7,19 @@ require_once __DIR__ . '/../includes/receipt_blockchain.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
-$isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';
-$isVet = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian';
-$isOwner = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'owner';
-
-if (!$isAdmin && !$isVet && !$isOwner) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Authentication required.']);
-    exit;
-}
+hw_require_role(['owner', 'vet_staff', 'head_vet'], true);
 
 try {
     $conn = hw_get_db();
     hw_receipt_ensure_table($conn);
 
-    $viewerRole = $isAdmin ? 'admin' : ($isVet ? 'vet' : 'owner');
+    $viewerRole = hw_session_role();
     $viewerOwnerId = null;
-    $issuerLabel = $isAdmin ? ('Admin (' . ($_SESSION['admin_username'] ?? 'Clinic') . ')') : ($_SESSION['username'] ?? 'Clinic');
+    $viewerVetId = (int)($_SESSION['vet_id'] ?? 0);
+    $issuerLabel = (string)($_SESSION['username'] ?? 'Clinic');
 
     if ($viewerRole === 'owner') {
-        $oStmt = $conn->prepare("SELECT Owner_ID FROM owner WHERE username = ? LIMIT 1");
+        $oStmt = $conn->prepare("SELECT Owner_ID FROM owner WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $oStmt->bind_param('s', $_SESSION['username']);
         $oStmt->execute();
         if ($oRow = $oStmt->get_result()->fetch_assoc()) {
@@ -39,11 +32,12 @@ try {
             $conn->close();
             exit;
         }
-    } elseif ($viewerRole === 'vet') {
-        $vStmt = $conn->prepare("SELECT First_Name, Last_Name FROM veterinarian WHERE username = ? LIMIT 1");
+    } else {
+        $vStmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name FROM veterinarian WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $vStmt->bind_param('s', $_SESSION['username']);
         $vStmt->execute();
         if ($vRow = $vStmt->get_result()->fetch_assoc()) {
+            $viewerVetId = (int)$vRow['Veterinarian_ID'];
             $issuerLabel = 'Dr. ' . trim($vRow['First_Name'] . ' ' . $vRow['Last_Name']);
         }
         $vStmt->close();
@@ -57,9 +51,9 @@ try {
             $stmt = $conn->prepare(
                 "SELECT Block_ID, Block_Index, Receipt_Code, Owner_ID, Reference_Type, Reference_ID,
                         Service_Summary, Amount, Currency, Merkle_Root, Prev_Hash, Block_Hash,
-                        Archive_Filename, Issued_By, Created_At, Expires_At
+                        Archive_Filename, Issued_By, Attending_Vet_ID, Attending_Vet_Name, Attending_Clinician_PRC, Status, Created_At, Expires_At
                  FROM receipt_blocks
-                 WHERE Owner_ID = ? AND Expires_At > NOW()
+                 WHERE Owner_ID = ? AND Status = 'ACTIVE' AND Expires_At > NOW()
                  ORDER BY Block_Index DESC
                  LIMIT 100"
             );
@@ -71,7 +65,7 @@ try {
             $res = $conn->query(
                 "SELECT Block_ID, Block_Index, Receipt_Code, Owner_ID, Reference_Type, Reference_ID,
                         Service_Summary, Amount, Currency, Merkle_Root, Prev_Hash, Block_Hash,
-                        Archive_Filename, Issued_By, Created_At, Expires_At
+                        Archive_Filename, Issued_By, Attending_Vet_ID, Attending_Vet_Name, Attending_Clinician_PRC, Status, Created_At, Expires_At
                  FROM receipt_blocks
                  ORDER BY Block_Index DESC
                  LIMIT 200"
@@ -116,12 +110,7 @@ try {
     }
 
     if ($action === 'issue') {
-        if ($viewerRole === 'owner') {
-            http_response_code(403);
-            echo json_encode(['success' => false, 'message' => 'Only clinic staff can issue receipts.']);
-            $conn->close();
-            exit;
-        }
+        hw_require_role(['vet_staff', 'head_vet'], true);
         hw_require_csrf();
         $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
         $ownerId = !empty($input['owner_id']) ? (int)$input['owner_id'] : null;
@@ -137,6 +126,8 @@ try {
             $oQ->close();
         }
 
+        $attendingVetId = !empty($input['attending_vet_id']) ? (int)$input['attending_vet_id'] : $viewerVetId;
+
         $issued = hw_receipt_issue($conn, [
             'reference_type' => $input['reference_type'] ?? 'manual',
             'reference_id' => !empty($input['reference_id']) ? (int)$input['reference_id'] : null,
@@ -146,6 +137,7 @@ try {
             'service_summary' => trim((string)($input['service_summary'] ?? 'Veterinary Service')),
             'amount' => (float)($input['amount'] ?? 0),
             'notes' => trim((string)($input['notes'] ?? '')),
+            'attending_vet_id' => $attendingVetId,
             'issued_by' => $issuerLabel,
         ]);
 

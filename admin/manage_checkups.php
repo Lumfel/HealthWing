@@ -49,9 +49,9 @@ try {
         $petId = (int)($data['petId'] ?? 0);
         $date = trim((string)($data['date'] ?? ''));
         $notes = hw_encrypt_gcm(trim((string)($data['notes'] ?? '')));
-        $vetId = !empty($data['vetId']) ? (int)$data['vetId'] : null;
-        if (!$petId || $date === '') {
-            throw new Exception("Pet and date are required");
+        $vetId = !empty($data['vetId']) ? (int)$data['vetId'] : (int)($_SESSION['vet_id'] ?? 0);
+        if (!$petId || $date === '' || $vetId <= 0) {
+            throw new Exception("Pet, date, and attending veterinarian are required");
         }
 
         $stmt = $conn->prepare("INSERT INTO pet_checkup (Pet_ID, Veterinarian_ID, Checkup_Date, Notes) VALUES (?, ?, ?, ?)");

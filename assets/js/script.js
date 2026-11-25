@@ -67,11 +67,12 @@ if (vetForm) {
             username: document.getElementById('username').value.trim(),
             password: document.getElementById('password').value,
             confirmPassword: document.getElementById('confirmPassword').value,
-            role: 'veterinarian',
+            role: 'vet_staff',
             age: document.getElementById('age') ? document.getElementById('age').value.trim() : '',
             address: document.getElementById('address') ? document.getElementById('address').value.trim() : '',
             contact: document.getElementById('contact') ? document.getElementById('contact').value.trim() : '',
-            specialties: document.getElementById('specialties') ? document.getElementById('specialties').value.trim() : ''
+            specialties: document.getElementById('specialties') ? document.getElementById('specialties').value.trim() : '',
+            prc_license_no: document.getElementById('prc_license_no') ? document.getElementById('prc_license_no').value.trim() : ''
         };
         if (data.password !== data.confirmPassword) {
             alert('Passwords do not match.');
@@ -85,7 +86,7 @@ if (vetForm) {
         .then(res => res.json())
         .then(response =>{
             if (response.status === 'success') {
-                alert('Your veterinarian account request has been submitted. An admin needs to approve it before you can sign in — you\'ll be notified once that happens.');
+                alert('Your veterinarian account request has been submitted. A Head Veterinarian needs to approve it before you can sign in.');
                 vetForm.reset();
                 window.location.href = 'login.php';
             } else if (response.status === 'exists') {

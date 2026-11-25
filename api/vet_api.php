@@ -5,29 +5,21 @@
 require_once __DIR__ . '/../includes/db.php';
 
 header('Content-Type: application/json');
-
-$isVet = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian';
-$isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';
-
-if (!$isVet && !$isAdmin) {
-    http_response_code(401);
-    echo json_encode(['success'=> false, 'error'=>'Veterinarian or Admin authentication required.']);
-    exit;
-}
+hw_require_role(['vet_staff', 'head_vet'], true);
 
 try {
     $conn = hw_get_db();
     $action = $_GET['action'] ?? ($_POST['action'] ?? 'clinical_overview');
 
-    $currentVetId = null;
+    $currentVetId = (int)($_SESSION['vet_id'] ?? 0);
     $currentVetName = 'Veterinarian';
-    if ($isVet) {
-        $vStmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name, Specialties FROM veterinarian WHERE username = ? LIMIT 1");
+    if (!empty($_SESSION['username'])) {
+        $vStmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name, Specialties FROM veterinarian WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $vStmt->bind_param('s', $_SESSION['username']);
         $vStmt->execute();
         if ($vRow = $vStmt->get_result()->fetch_assoc()) {
             $currentVetId = (int)$vRow['Veterinarian_ID'];
-            $currentVetName = 'Dr. '. trim($vRow['First_Name'] . ''. $vRow['Last_Name']);
+            $currentVetName = 'Dr. ' . trim($vRow['First_Name'] . ' ' . $vRow['Last_Name']);
         }
         $vStmt->close();
     }
@@ -96,8 +88,8 @@ try {
         $notes = trim($input['notes'] ?? '');
         $updatePetMed = !empty($input['update_pet_record']);
 
-        if (!$petId) {
-            echo json_encode(['success'=> false, 'error'=>'Pet selection is required.']);
+        if (!$petId || $currentVetId <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Pet selection and verified attending veterinarian are required.']);
             $conn->close();
             exit;
         }

@@ -24,9 +24,8 @@ hw_start_secure_session();
  */
 function call_current_role(): ?string
 {
-    $role = $_SESSION['role'] ?? '';
-    if ($role === 'owner') return 'owner';
-    if ($role === 'Veterinarian') return 'vet';
+    if (hw_is_owner()) return 'owner';
+    if (hw_is_vet_role()) return 'vet';
     return null;
 }
 

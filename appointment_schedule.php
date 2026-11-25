@@ -22,13 +22,13 @@ $vetsList = [];
 
 try {
     $conn = hw_get_db();
-    if ($isLoggedIn && ($_SESSION['role'] ?? '') === 'owner') {
-        $stmt = $conn->prepare('SELECT Owner_ID, First_Name, Last_Name, email, Contact FROM owner WHERE username = ? LIMIT 1');
+    if ($isLoggedIn && hw_is_owner()) {
+        $stmt = $conn->prepare('SELECT Owner_ID, First_Name, Last_Name, email, Contact FROM owner WHERE username = ? AND Deleted_At IS NULL LIMIT 1');
         $stmt->bind_param('s', $username);
         $stmt->execute();
         if ($row = $stmt->get_result()->fetch_assoc()) {
             $ownerInfo = $row;
-            $pStmt = $conn->prepare('SELECT Pet_ID, Pet_Name, Species, Pet_Type, Age FROM pet WHERE Owner_ID = ? ORDER BY Pet_Name ASC');
+            $pStmt = $conn->prepare('SELECT Pet_ID, Pet_Name, Species, Pet_Type, Age FROM pet WHERE Owner_ID = ? AND Deleted_At IS NULL ORDER BY Pet_Name ASC');
             $pStmt->bind_param('i', $row['Owner_ID']);
             $pStmt->execute();
             $ownerPets = $pStmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -37,7 +37,7 @@ try {
         $stmt->close();
     }
 
-    $vRes = $conn->query("SELECT Veterinarian_ID, First_Name, Last_Name, Specialties FROM veterinarian WHERE COALESCE(Status, 'Approved') = 'Approved'ORDER BY First_Name ASC");
+    $vRes = $conn->query("SELECT Veterinarian_ID, First_Name, Last_Name, Specialties FROM veterinarian WHERE COALESCE(Status, 'Approved') = 'Approved' AND Deleted_At IS NULL ORDER BY First_Name ASC");
     if ($vRes) {
         $vetsList = $vRes->fetch_all(MYSQLI_ASSOC);
     }

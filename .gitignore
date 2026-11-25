@@ -2,6 +2,8 @@ rate_limit_data/
 *.gcm
 *.gcm.json
 .hw_master_key
+.healthwing_hw_master_key
+.healthwing_secrets/
 *.key
 archives/owner_receipts/
 emergency_uploads/

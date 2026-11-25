@@ -6,11 +6,7 @@ require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'You need to sign in as a pet owner to use this.']);
-    exit();
-}
+hw_require_role(['owner'], true);
 
 hw_require_csrf();
 

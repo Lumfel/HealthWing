@@ -1,39 +1,39 @@
 <?php
 /**
- * HealthWing / VetSystem — Unified Real-Time Chat & WebSocket Persistence API (api/chat_api.php)
+ * HealthWing / VetSystem — Unified 3-Role Real-Time Chat & WebSocket Persistence API (api/chat_api.php)
  */
 
 require_once __DIR__ . '/../includes/db.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
+hw_require_role(['owner', 'vet_staff', 'head_vet'], true);
+
 function hw_chat_current_actor(mysqli $conn): ?array
 {
-    if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin') {
-        return [
-            'role' => 'admin',
-            'id' => (int)($_SESSION['admin_id'] ?? 1),
-            'name' => 'Admin (' . ($_SESSION['admin_username'] ?? 'Clinic') . ')',
-        ];
+    $role = hw_session_role();
+    $username = (string)($_SESSION['username'] ?? '');
+    if ($username === '') {
+        return null;
     }
-    $role = $_SESSION['role'] ?? '';
-    $username = $_SESSION['username'] ?? '';
-    if ($role === 'Veterinarian' && $username !== '') {
-        $stmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name FROM veterinarian WHERE username = ? LIMIT 1");
+
+    if (in_array($role, ['vet_staff', 'head_vet'], true)) {
+        $stmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name, Role_Level FROM veterinarian WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $stmt->bind_param('s', $username);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
         $stmt->close();
         if ($row) {
             return [
-                'role' => 'vet',
+                'role' => hw_normalize_role((string)$row['Role_Level']),
                 'id' => (int)$row['Veterinarian_ID'],
                 'name' => 'Dr. ' . trim($row['First_Name'] . ' ' . $row['Last_Name']),
             ];
         }
     }
-    if ($role === 'owner' && $username !== '') {
-        $stmt = $conn->prepare("SELECT Owner_ID, First_Name, Last_Name FROM owner WHERE username = ? LIMIT 1");
+
+    if ($role === 'owner') {
+        $stmt = $conn->prepare("SELECT Owner_ID, First_Name, Last_Name FROM owner WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $stmt->bind_param('s', $username);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
@@ -46,6 +46,7 @@ function hw_chat_current_actor(mysqli $conn): ?array
             ];
         }
     }
+
     return null;
 }
 
@@ -103,7 +104,7 @@ try {
             $eStmt = $conn->prepare(
                 "SELECT Booking_ID, Severity_Level, Status, Created_At
                  FROM emergency_booking
-                 WHERE Owner_ID = ?
+                 WHERE Owner_ID = ? AND Deleted_At IS NULL
                  ORDER BY Booking_ID DESC LIMIT 10"
             );
             $eStmt->bind_param('i', $ownerId);
@@ -124,7 +125,7 @@ try {
                 "SELECT s.Schedule_ID, s.Services, s.Appointment_Time, s.Status, p.Pet_Name
                  FROM schedule s
                  LEFT JOIN pet p ON s.Pet_ID = p.Pet_ID
-                 WHERE s.Owner_ID = ?
+                 WHERE s.Owner_ID = ? AND s.Deleted_At IS NULL
                  ORDER BY s.Appointment_Time DESC LIMIT 10"
             );
             $sStmt->bind_param('i', $ownerId);
@@ -144,7 +145,7 @@ try {
             $eRes = $conn->query(
                 "SELECT Booking_ID, Name, Severity_Level, Priority_Score, Status, Queue_Position
                  FROM emergency_booking
-                 WHERE Status IN ('Pending', 'In Progress', 'Contact')
+                 WHERE Deleted_At IS NULL AND Status IN ('Pending', 'In Progress', 'Contact')
                  ORDER BY COALESCE(Queue_Position, 999) ASC, Booking_ID DESC LIMIT 25"
             );
             if ($eRes) {
@@ -166,7 +167,7 @@ try {
                  FROM schedule s
                  LEFT JOIN owner o ON s.Owner_ID = o.Owner_ID
                  LEFT JOIN pet p ON s.Pet_ID = p.Pet_ID
-                 WHERE s.Status IN ('Pending', 'Confirmed', 'In Progress')
+                 WHERE s.Deleted_At IS NULL AND s.Status IN ('Pending', 'Confirmed', 'In Progress')
                  ORDER BY s.Appointment_Time ASC LIMIT 25"
             );
             if ($sRes) {
@@ -186,6 +187,7 @@ try {
                 "SELECT DISTINCT c.Channel_Key, o.Owner_ID, o.First_Name, o.Last_Name
                  FROM chat_messages c
                  JOIN owner o ON c.Channel_Key = CONCAT('owner_', o.Owner_ID)
+                 WHERE o.Deleted_At IS NULL
                  ORDER BY c.Message_ID DESC LIMIT 20"
             );
             if ($oRes) {

@@ -10,7 +10,7 @@ require_once __DIR__ . '/includes/db.php';
 header('Content-Type: application/json');
 header('Cache-Control: private, max-age=30');
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
+if (!hw_is_owner()) {
     echo json_encode(['status'=>'error', 'message'=>'Not logged in as owner']);
     exit();
 }

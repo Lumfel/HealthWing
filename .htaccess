@@ -27,8 +27,14 @@ Options -Indexes
     RewriteRule (^|/)\. - [F,L]
     RewriteRule ^composer\.(json|lock)$ - [F,NC,L]
 
-    # Block direct browser navigation/download of raw assets, configs, keys, docs, and archives
-    RewriteRule \.(html|htm|css|js|map|sql|json|gcm|key|md|bat|sh|env|log)$ - [F,NC,L]
+    # Block direct browser navigation/download of raw assets, configs, keys, docs, and archives.
+    # Gate .css/.js so embedded assets can load while direct document navigation stays blocked.
+    RewriteCond %{REQUEST_URI} \.(css|js)$ [NC]
+    RewriteCond %{HTTP_SEC_FETCH_DEST} =document [OR]
+    RewriteCond %{HTTP_REFERER} ^$
+    RewriteRule \.(css|js)$ - [F,NC,L]
+
+    RewriteRule \.(html|htm|map|sql|json|gcm|key|md|bat|sh|env|log)$ - [F,NC,L]
 
     # Deny sensitive directories even if accessed directly
     RewriteRule ^(archives|docs|includes|database|rate_limit_data)(/|$) - [F,NC,L]

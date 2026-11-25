@@ -4,7 +4,11 @@ require_once __DIR__ . '/includes/turnstile.php';
 hw_start_secure_session();
 
 if (isset($_SESSION['username']) && !empty($_SESSION['username'])) {
-    if (($_SESSION['role'] ?? '') === 'Veterinarian') {
+    if (hw_is_head_vet()) {
+        header('Location: admin/ADMIN_VET_1.php');
+        exit;
+    }
+    if (hw_is_vet_staff()) {
         header('Location: vetindex.php');
         exit;
     }
@@ -51,7 +55,7 @@ $csrfToken = hw_csrf_token();
                 </div>
                 <button type="submit" class="login-btn">Sign In</button>
             </form>
-            <p class="register-text">Don't have an account? <a href="choose_role.php">Register</a> &middot; <a href="admin_login_page.php">Admin Login</a></p>
+            <p class="register-text">Don't have an account? <a href="choose_role.php">Register</a></p>
         </div>
     </div>
 

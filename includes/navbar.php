@@ -1,14 +1,16 @@
 <?php
 /**
- * HealthWing / VetSystem — Unified Role-Aware & Mobile-First Navigation Bar (includes/navbar.php)
+ * HealthWing / VetSystem — Unified 3-Role Navigation Bar (includes/navbar.php)
  */
 require_once __DIR__ . '/security_crypto.php';
 hw_start_secure_session();
 
 $hwIsLoggedIn = isset($_SESSION['username']) && !empty($_SESSION['username']);
 $hwUsername = $hwIsLoggedIn ? $_SESSION['username'] : null;
-$hwRole = $_SESSION['role'] ?? null;
-$hwIsAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';
+$hwRole = hw_session_role();
+$hwIsHeadVet = hw_is_head_vet();
+$hwIsVet = hw_is_vet_role();
+$hwIsOwner = hw_is_owner();
 $hwCurrentPage = basename($_SERVER['PHP_SELF'] ?? 'index.php');
 $hwCsrfToken = hw_csrf_token();
 
@@ -52,26 +54,26 @@ if (!function_exists('hw_nav_active')) {
         <a href="services.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['services.php'], $hwCurrentPage); ?>">Services</a>
         <a href="public_calendar.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['public_calendar.php'], $hwCurrentPage); ?>">Public Calendar</a>
 
-        <?php if ($hwRole === 'Veterinarian'): ?>
+        <?php if ($hwIsVet): ?>
           <a href="vetindex.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['vetindex.php'], $hwCurrentPage); ?>">Vet Workstation</a>
         <?php else: ?>
           <a href="appointment_schedule.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['appointment_schedule.php'], $hwCurrentPage); ?>">+ Book Appointment</a>
         <?php endif; ?>
 
-        <?php if ($hwRole === 'owner'): ?>
+        <?php if ($hwIsOwner): ?>
           <a href="owner_bookings.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['owner_bookings.php'], $hwCurrentPage); ?>">My Bookings</a>
           <a href="my_pets.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['my_pets.php'], $hwCurrentPage); ?>">My Pets</a>
         <?php endif; ?>
 
-        <?php if ($hwIsLoggedIn || $hwIsAdmin): ?>
+        <?php if ($hwIsLoggedIn): ?>
           <a href="receipts.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['receipts.php'], $hwCurrentPage); ?>">Receipts</a>
         <?php endif; ?>
 
         <a href="AboutUs.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['AboutUs.php'], $hwCurrentPage); ?>">About</a>
         <a href="contact.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['contact.php'], $hwCurrentPage); ?>">Contact</a>
 
-        <?php if ($hwIsAdmin): ?>
-          <a href="admin/ADMIN_VET_1.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;background:#E3A857;color:#16262A;font-weight:700;">Admin Panel</a>
+        <?php if ($hwIsHeadVet): ?>
+          <a href="admin/ADMIN_VET_1.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;background:#E3A857;color:#16262A;font-weight:700;">Head Vet Console</a>
         <?php endif; ?>
       </nav>
 
@@ -82,7 +84,7 @@ if (!function_exists('hw_nav_active')) {
 
         <?php if ($hwIsLoggedIn): ?>
           <span style="background:rgba(255,255,255,0.14);padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;">
-            <?php echo $hwRole === 'Veterinarian' ? 'Dr. ' : ''; ?><?php echo htmlspecialchars((string)$hwUsername, ENT_QUOTES, 'UTF-8'); ?>
+            <?php echo $hwIsVet ? 'Dr. ' : ''; ?><?php echo htmlspecialchars((string)$hwUsername, ENT_QUOTES, 'UTF-8'); ?>
           </span>
           <form action="logout.php" method="post" style="margin:0;">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($hwCsrfToken, ENT_QUOTES, 'UTF-8'); ?>">
@@ -91,7 +93,6 @@ if (!function_exists('hw_nav_active')) {
         <?php else: ?>
           <a href="login.php" style="background:#DBE48C;color:#16262A;text-decoration:none;padding:8px 13px;border-radius:8px;font-size:12.5px;font-weight:700;">Sign In</a>
           <a href="choose_role.php" style="border:1px solid rgba(255,255,255,0.5);color:#fff;text-decoration:none;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:600;">Sign Up</a>
-          <a href="admin_login_page.php" style="color:#B8E1EC;text-decoration:none;font-size:11.5px;font-weight:600;">Admin</a>
         <?php endif; ?>
       </div>
     </div>
@@ -99,7 +100,7 @@ if (!function_exists('hw_nav_active')) {
 </header>
 
 <nav id="hwMobileBottomDock" class="hw-mobile-bottom-dock" aria-label="Mobile Quick Navigation">
-  <?php if ($hwRole === 'Veterinarian'): ?>
+  <?php if ($hwIsVet): ?>
     <a href="vetindex.php" class="hw-dock-item <?php echo $hwCurrentPage === 'vetindex.php' ? 'active' : ''; ?>">
       <span class="hw-dock-icon"></span><span>Triage</span>
     </a>

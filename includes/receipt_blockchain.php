@@ -12,7 +12,7 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
     define('HW_RECEIPT_RETENTION_DAYS', 365);
 
     /**
-     * Ensures the receipt_blocks ledger table exists.
+     * Ensures the canonical receipt_blocks ledger table exists (matches database/veterinarydb.sql).
      */
     function hw_receipt_ensure_table(mysqli $conn): void
     {
@@ -32,14 +32,20 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
             `Payload_Ciphertext` mediumtext NOT NULL,
             `Archive_Filename` varchar(128) DEFAULT NULL,
             `Issued_By` varchar(100) NOT NULL,
+            `Attending_Vet_ID` int(11) NOT NULL,
+            `Attending_Vet_Name` varchar(150) NOT NULL,
+            `Attending_Clinician_PRC` varchar(64) NOT NULL,
+            `Status` enum('ACTIVE','PURGED_1YR') NOT NULL DEFAULT 'ACTIVE',
             `Created_At` datetime NOT NULL,
             `Expires_At` datetime NOT NULL,
             PRIMARY KEY (`Block_ID`),
             UNIQUE KEY `uniq_receipt_code` (`Receipt_Code`),
             UNIQUE KEY `uniq_block_index` (`Block_Index`),
+            UNIQUE KEY `uq_receipt_ref` (`Reference_Type`, `Reference_ID`),
             KEY `idx_owner_id` (`Owner_ID`),
-            KEY `idx_ref` (`Reference_Type`, `Reference_ID`),
-            KEY `idx_expires_at` (`Expires_At`)
+            KEY `idx_attending_vet` (`Attending_Vet_ID`),
+            KEY `idx_expires_at` (`Expires_At`),
+            KEY `idx_status` (`Status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
     }
 
@@ -83,6 +89,9 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
             'amount:' . number_format((float)($payload['amount'] ?? 0), 2, '.', ''),
             'currency:' . ($payload['currency'] ?? 'PHP'),
             'issued_by:' . ($payload['issued_by'] ?? ''),
+            'attending_vet_id:' . ($payload['attending_vet_id'] ?? ''),
+            'attending_vet_name:' . ($payload['attending_vet_name'] ?? ''),
+            'attending_clinician_prc:' . ($payload['attending_clinician_prc'] ?? ''),
             'created_at:' . ($payload['created_at'] ?? ''),
             'expires_at:' . ($payload['expires_at'] ?? ''),
         ];
@@ -98,7 +107,8 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
     }
 
     /**
-     * Automatically deletes encrypted owner receipt copies older than 365 days.
+     * Purges encrypted owner copies in archives/owner_receipts/ after 365 days and marks Status = 'PURGED_1YR'.
+     * Never deletes immutable receipt_blocks ledger rows and only marks PURGED_1YR after verifying unlink.
      */
     function hw_receipt_purge_expired(mysqli $conn): int
     {
@@ -106,34 +116,31 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
         $purged = 0;
         $archiveDir = HW_RECEIPT_ARCHIVE_DIR;
 
-        $res = $conn->query("SELECT Block_ID, Archive_Filename FROM receipt_blocks WHERE Expires_At <= NOW() AND Archive_Filename IS NOT NULL");
+        $res = $conn->query(
+            "SELECT Block_ID, Archive_Filename, Status
+             FROM receipt_blocks
+             WHERE Expires_At <= NOW() AND Status = 'ACTIVE'"
+        );
         if ($res) {
-            $upd = $conn->prepare("UPDATE receipt_blocks SET Archive_Filename = NULL WHERE Block_ID = ?");
+            $upd = $conn->prepare("UPDATE receipt_blocks SET Archive_Filename = NULL, Status = 'PURGED_1YR' WHERE Block_ID = ?");
             while ($row = $res->fetch_assoc()) {
-                $file = basename((string)$row['Archive_Filename']);
-                $full = $archiveDir . DIRECTORY_SEPARATOR . $file;
-                if ($file !== '' && file_exists($full)) {
-                    @unlink($full);
+                $file = basename((string)($row['Archive_Filename'] ?? ''));
+                $unlinkedOrAbsent = true;
+                if ($file !== '') {
+                    $full = $archiveDir . DIRECTORY_SEPARATOR . $file;
+                    if (is_file($full)) {
+                        $unlinkedOrAbsent = @unlink($full);
+                    }
                 }
-                if ($upd) {
+                if ($unlinkedOrAbsent && $upd) {
                     $bId = (int)$row['Block_ID'];
                     $upd->bind_param('i', $bId);
                     $upd->execute();
+                    $purged++;
                 }
-                $purged++;
             }
             if ($upd) {
                 $upd->close();
-            }
-        }
-
-        if (is_dir($archiveDir)) {
-            $cutoff = time() - (HW_RECEIPT_RETENTION_DAYS * 86400);
-            foreach (glob($archiveDir . DIRECTORY_SEPARATOR . '*.gcm') ?: [] as $gcmFile) {
-                if (@filemtime($gcmFile) !== false && @filemtime($gcmFile) < $cutoff) {
-                    @unlink($gcmFile);
-                    $purged++;
-                }
             }
         }
 
@@ -156,34 +163,52 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
     }
 
     /**
-     * Issues a new hash-chained receipt block and writes an AES-256-GCM owner copy (1-year retention).
+     * Resolves verified attending veterinarian accountability metadata from the veterinarian table.
+     */
+    function hw_receipt_resolve_attending_vet(mysqli $conn, array $input): array
+    {
+        $vetId = !empty($input['attending_vet_id']) ? (int)$input['attending_vet_id'] : (int)($_SESSION['vet_id'] ?? 0);
+        if ($vetId <= 0) {
+            throw new RuntimeException('An attending veterinarian (Attending_Vet_ID) is required to issue a clinical receipt.');
+        }
+
+        $stmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name, PRC_License_No FROM veterinarian WHERE Veterinarian_ID = ? AND Deleted_At IS NULL LIMIT 1");
+        $stmt->bind_param('i', $vetId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$row || trim((string)($row['PRC_License_No'] ?? '')) === '') {
+            throw new RuntimeException('Attending veterinarian account or PRC license number could not be verified.');
+        }
+
+        return [
+            'vet_id' => (int)$row['Veterinarian_ID'],
+            'vet_name' => 'Dr. ' . trim($row['First_Name'] . ' ' . $row['Last_Name']),
+            'prc_license_no' => trim((string)$row['PRC_License_No']),
+        ];
+    }
+
+    /**
+     * Issues a new hash-chained receipt block (starting at Genesis Block #0) and writes
+     * a 365-day AES-256-GCM encrypted owner archive copy. Strictly serialized with `hw_receipt_ledger` mutex.
      */
     function hw_receipt_issue(mysqli $conn, array $input): array
     {
         hw_receipt_ensure_table($conn);
-        hw_receipt_purge_expired($conn);
 
         $refType = in_array($input['reference_type'] ?? 'schedule', ['schedule', 'emergency', 'manual'], true)
             ? (string)$input['reference_type']
             : 'manual';
-        $refId = !empty($input['reference_id']) ? (int)$input['reference_id'] : null;
+        $refId = ($refType !== 'manual' && !empty($input['reference_id'])) ? (int)$input['reference_id'] : null;
 
-        if ($refType !== 'manual' && $refId !== null) {
-            $chk = $conn->prepare("SELECT Block_ID, Receipt_Code, Merkle_Root, Prev_Hash, Block_Hash, Created_At, Expires_At FROM receipt_blocks WHERE Reference_Type = ? AND Reference_ID = ? LIMIT 1");
-            $chk->bind_param('si', $refType, $refId);
-            $chk->execute();
-            $existing = $chk->get_result()->fetch_assoc();
-            $chk->close();
-            if ($existing) {
-                return ['already_exists' => true, 'receipt' => $existing];
-            }
-        }
+        $attending = hw_receipt_resolve_attending_vet($conn, $input);
 
         $ownerId = !empty($input['owner_id']) ? (int)$input['owner_id'] : null;
         $ownerName = trim((string)($input['owner_name'] ?? 'Clinic Client'));
         $petName = trim((string)($input['pet_name'] ?? 'Companion Pet'));
         $serviceSummary = trim((string)($input['service_summary'] ?? 'Veterinary Consultation'));
-        $issuedBy = trim((string)($input['issued_by'] ?? 'HealthWing Clinic'));
+        $issuedBy = trim((string)($input['issued_by'] ?? $attending['vet_name']));
         $currency = 'PHP';
 
         $items = $input['items'] ?? null;
@@ -207,102 +232,192 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
         }
         $totalAmount = round($totalAmount, 2);
 
-        $nowTs = time();
-        $createdAt = date('Y-m-d H:i:s', $nowTs);
-        $expiresAt = date('Y-m-d H:i:s', $nowTs + (HW_RECEIPT_RETENTION_DAYS * 86400));
-        $receiptCode = 'HW-RCPT-' . date('Ymd', $nowTs) . '-' . strtoupper(bin2hex(random_bytes(4)));
+        $lockAcquired = false;
+        $startedTx = false;
+        $writtenArchivePath = null;
 
-        $payload = [
-            'receipt_code' => $receiptCode,
-            'owner_id' => $ownerId,
-            'owner_name' => $ownerName,
-            'pet_name' => $petName,
-            'reference_type' => $refType,
-            'reference_id' => $refId,
-            'service_summary' => $serviceSummary,
-            'items' => $cleanItems,
-            'amount' => $totalAmount,
-            'currency' => $currency,
-            'notes' => trim((string)($input['notes'] ?? '')),
-            'issued_by' => $issuedBy,
-            'created_at' => $createdAt,
-            'expires_at' => $expiresAt,
-        ];
+        try {
+            $lockAcquired = hw_db_acquire_lock($conn, 'hw_receipt_ledger', 5);
+            if (!$lockAcquired) {
+                throw new RuntimeException('Receipt ledger is busy. Please retry.');
+            }
 
-        $merkleRoot = hw_receipt_compute_merkle_root(hw_receipt_build_leaves($payload));
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('Unable to start receipt ledger transaction.');
+            }
+            $startedTx = true;
 
-        $lastRes = $conn->query("SELECT Block_Index, Block_Hash FROM receipt_blocks ORDER BY Block_Index DESC LIMIT 1");
-        $lastRow = $lastRes ? $lastRes->fetch_assoc() : null;
-        $nextIndex = $lastRow ? ((int)$lastRow['Block_Index'] + 1) : 1;
-        $prevHash = $lastRow ? (string)$lastRow['Block_Hash'] : str_repeat('0', 64);
+            // Idempotent check before insert
+            if ($refType !== 'manual' && $refId !== null) {
+                $chk = $conn->prepare(
+                    "SELECT Block_ID, Block_Index, Receipt_Code, Merkle_Root, Prev_Hash, Block_Hash, Attending_Vet_ID, Attending_Vet_Name, Attending_Clinician_PRC, Status, Created_At, Expires_At
+                     FROM receipt_blocks
+                     WHERE Reference_Type = ? AND Reference_ID = ?
+                     LIMIT 1 FOR UPDATE"
+                );
+                $chk->bind_param('si', $refType, $refId);
+                $chk->execute();
+                $existing = $chk->get_result()->fetch_assoc();
+                $chk->close();
+                if ($existing) {
+                    $conn->rollback();
+                    $startedTx = false;
+                    return ['already_exists' => true, 'receipt' => $existing];
+                }
+            }
 
-        $blockHash = hash('sha256', implode('|', [
-            $nextIndex,
-            $receiptCode,
-            $merkleRoot,
-            $prevHash,
-            $createdAt,
-        ]));
+            // Genesis Block #0 when table is empty; strictly serialized by hw_receipt_ledger lock
+            $lastRes = $conn->query("SELECT Block_Index, Block_Hash FROM receipt_blocks ORDER BY Block_Index DESC LIMIT 1 FOR UPDATE");
+            $lastRow = $lastRes ? $lastRes->fetch_assoc() : null;
+            $nextIndex = $lastRow ? ((int)$lastRow['Block_Index'] + 1) : 0;
+            $prevHash = $lastRow ? (string)$lastRow['Block_Hash'] : str_repeat('0', 64);
 
-        $ciphertext = hw_encrypt_gcm((string)json_encode($payload), 'receipt:' . $receiptCode);
+            $nowTs = time();
+            $createdAt = date('Y-m-d H:i:s', $nowTs);
+            $expiresAt = date('Y-m-d H:i:s', $nowTs + (HW_RECEIPT_RETENTION_DAYS * 86400));
+            $receiptCode = 'HW-RCPT-' . date('Ymd', $nowTs) . '-' . strtoupper(bin2hex(random_bytes(4)));
 
-        if (!is_dir(HW_RECEIPT_ARCHIVE_DIR)) {
-            @mkdir(HW_RECEIPT_ARCHIVE_DIR, 0750, true);
+            $payload = [
+                'receipt_code' => $receiptCode,
+                'owner_id' => $ownerId,
+                'owner_name' => $ownerName,
+                'pet_name' => $petName,
+                'reference_type' => $refType,
+                'reference_id' => $refId,
+                'service_summary' => $serviceSummary,
+                'items' => $cleanItems,
+                'amount' => $totalAmount,
+                'currency' => $currency,
+                'notes' => trim((string)($input['notes'] ?? '')),
+                'issued_by' => $issuedBy,
+                'attending_vet_id' => $attending['vet_id'],
+                'attending_vet_name' => $attending['vet_name'],
+                'attending_clinician_prc' => $attending['prc_license_no'],
+                'created_at' => $createdAt,
+                'expires_at' => $expiresAt,
+            ];
+
+            $merkleRoot = hw_receipt_compute_merkle_root(hw_receipt_build_leaves($payload));
+            $blockHash = hash('sha256', implode('|', [
+                $nextIndex,
+                $receiptCode,
+                $merkleRoot,
+                $prevHash,
+                $createdAt,
+            ]));
+
+            $ciphertext = hw_encrypt_gcm((string)json_encode($payload), 'receipt:' . $receiptCode);
+            $archiveFilename = $receiptCode . '.gcm';
+            $status = 'ACTIVE';
+
+            $stmt = $conn->prepare(
+                "INSERT INTO receipt_blocks
+                 (Block_Index, Receipt_Code, Owner_ID, Reference_Type, Reference_ID, Service_Summary, Amount, Currency, Merkle_Root, Prev_Hash, Block_Hash, Payload_Ciphertext, Archive_Filename, Issued_By, Attending_Vet_ID, Attending_Vet_Name, Attending_Clinician_PRC, Status, Created_At, Expires_At)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            $stmt->bind_param(
+                'isisisdsssssssisssss',
+                $nextIndex,
+                $receiptCode,
+                $ownerId,
+                $refType,
+                $refId,
+                $serviceSummary,
+                $totalAmount,
+                $currency,
+                $merkleRoot,
+                $prevHash,
+                $blockHash,
+                $ciphertext,
+                $archiveFilename,
+                $issuedBy,
+                $attending['vet_id'],
+                $attending['vet_name'],
+                $attending['prc_license_no'],
+                $status,
+                $createdAt,
+                $expiresAt
+            );
+
+            try {
+                $ok = $stmt->execute();
+                $errNo = $stmt->errno;
+                $blockId = (int)$stmt->insert_id;
+                $stmt->close();
+                if (!$ok) {
+                    throw new mysqli_sql_exception('Receipt insert failed', $errNo);
+                }
+            } catch (mysqli_sql_exception $sqlEx) {
+                if ((int)$sqlEx->getCode() === 1062 && $refType !== 'manual' && $refId !== null) {
+                    $conn->rollback();
+                    $startedTx = false;
+                    $dup = $conn->prepare(
+                        "SELECT Block_ID, Block_Index, Receipt_Code, Merkle_Root, Prev_Hash, Block_Hash, Attending_Vet_ID, Attending_Vet_Name, Attending_Clinician_PRC, Status, Created_At, Expires_At
+                         FROM receipt_blocks
+                         WHERE Reference_Type = ? AND Reference_ID = ? LIMIT 1"
+                    );
+                    $dup->bind_param('si', $refType, $refId);
+                    $dup->execute();
+                    $existing = $dup->get_result()->fetch_assoc();
+                    $dup->close();
+                    if ($existing) {
+                        return ['already_exists' => true, 'receipt' => $existing];
+                    }
+                }
+                throw $sqlEx;
+            }
+
+            if (!is_dir(HW_RECEIPT_ARCHIVE_DIR)) {
+                @mkdir(HW_RECEIPT_ARCHIVE_DIR, 0750, true);
+            }
+            $writtenArchivePath = HW_RECEIPT_ARCHIVE_DIR . DIRECTORY_SEPARATOR . $archiveFilename;
+            if (@file_put_contents($writtenArchivePath, $ciphertext, LOCK_EX) === false) {
+                throw new RuntimeException('Unable to write encrypted owner receipt archive.');
+            }
+
+            $conn->commit();
+            $startedTx = false;
+
+            return [
+                'already_exists' => false,
+                'receipt' => [
+                    'Block_ID' => $blockId,
+                    'Block_Index' => $nextIndex,
+                    'Receipt_Code' => $receiptCode,
+                    'Owner_ID' => $ownerId,
+                    'Service_Summary' => $serviceSummary,
+                    'Amount' => $totalAmount,
+                    'Currency' => $currency,
+                    'Merkle_Root' => $merkleRoot,
+                    'Prev_Hash' => $prevHash,
+                    'Block_Hash' => $blockHash,
+                    'Archive_Filename' => $archiveFilename,
+                    'Issued_By' => $issuedBy,
+                    'Attending_Vet_ID' => $attending['vet_id'],
+                    'Attending_Vet_Name' => $attending['vet_name'],
+                    'Attending_Clinician_PRC' => $attending['prc_license_no'],
+                    'Status' => $status,
+                    'Created_At' => $createdAt,
+                    'Expires_At' => $expiresAt,
+                ],
+            ];
+        } catch (Throwable $e) {
+            if ($startedTx) {
+                @$conn->rollback();
+            }
+            if ($writtenArchivePath !== null && is_file($writtenArchivePath)) {
+                @unlink($writtenArchivePath);
+            }
+            throw $e;
+        } finally {
+            if ($lockAcquired) {
+                hw_db_release_lock($conn, 'hw_receipt_ledger');
+            }
         }
-        $archiveFilename = $receiptCode . '.gcm';
-        @file_put_contents(HW_RECEIPT_ARCHIVE_DIR . DIRECTORY_SEPARATOR . $archiveFilename, $ciphertext, LOCK_EX);
-
-        $stmt = $conn->prepare(
-            "INSERT INTO receipt_blocks
-             (Block_Index, Receipt_Code, Owner_ID, Reference_Type, Reference_ID, Service_Summary, Amount, Currency, Merkle_Root, Prev_Hash, Block_Hash, Payload_Ciphertext, Archive_Filename, Issued_By, Created_At, Expires_At)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        );
-        $stmt->bind_param(
-            'isisisdsssssssss',
-            $nextIndex,
-            $receiptCode,
-            $ownerId,
-            $refType,
-            $refId,
-            $serviceSummary,
-            $totalAmount,
-            $currency,
-            $merkleRoot,
-            $prevHash,
-            $blockHash,
-            $ciphertext,
-            $archiveFilename,
-            $issuedBy,
-            $createdAt,
-            $expiresAt
-        );
-        $stmt->execute();
-        $blockId = (int)$stmt->insert_id;
-        $stmt->close();
-
-        return [
-            'already_exists' => false,
-            'receipt' => [
-                'Block_ID' => $blockId,
-                'Block_Index' => $nextIndex,
-                'Receipt_Code' => $receiptCode,
-                'Owner_ID' => $ownerId,
-                'Service_Summary' => $serviceSummary,
-                'Amount' => $totalAmount,
-                'Currency' => $currency,
-                'Merkle_Root' => $merkleRoot,
-                'Prev_Hash' => $prevHash,
-                'Block_Hash' => $blockHash,
-                'Archive_Filename' => $archiveFilename,
-                'Issued_By' => $issuedBy,
-                'Created_At' => $createdAt,
-                'Expires_At' => $expiresAt,
-            ],
-        ];
     }
 
     /**
-     * Verifies cryptographic hash-chain linkage, block hashes, and Merkle roots across all blocks.
+     * Verifies cryptographic hash-chain linkage (Genesis Block #0 onward), block hashes, and Merkle roots.
      */
     function hw_receipt_verify_chain(mysqli $conn): array
     {
@@ -311,7 +426,7 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
 
         $res = $conn->query("SELECT * FROM receipt_blocks ORDER BY Block_Index ASC");
         $expectedPrev = str_repeat('0', 64);
-        $expectedIdx = 1;
+        $expectedIdx = 0;
         $checked = 0;
         $errors = [];
 
@@ -365,13 +480,14 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
     }
 
     /**
-     * Loads and decrypts a receipt for an authorized Owner, Veterinarian, or Admin.
+     * Loads and decrypts a receipt for an authorized Owner, Vet Staff, or Head Vet.
      */
     function hw_receipt_read_for_viewer(mysqli $conn, int $blockId, string $role, ?int $ownerId): ?array
     {
         hw_receipt_ensure_table($conn);
         hw_receipt_purge_expired($conn);
 
+        $role = hw_normalize_role($role);
         $stmt = $conn->prepare("SELECT * FROM receipt_blocks WHERE Block_ID = ? LIMIT 1");
         $stmt->bind_param('i', $blockId);
         $stmt->execute();
@@ -386,14 +502,14 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
             if ($ownerId === null || (int)$row['Owner_ID'] !== $ownerId) {
                 return null;
             }
-            if (strtotime((string)$row['Expires_At']) <= time()) {
+            if (($row['Status'] ?? 'ACTIVE') === 'PURGED_1YR' || strtotime((string)$row['Expires_At']) <= time()) {
                 return null;
             }
         }
 
         $code = (string)$row['Receipt_Code'];
         $cipher = null;
-        if (!empty($row['Archive_Filename'])) {
+        if (($row['Status'] ?? 'ACTIVE') === 'ACTIVE' && !empty($row['Archive_Filename'])) {
             $archivePath = HW_RECEIPT_ARCHIVE_DIR . DIRECTORY_SEPARATOR . basename((string)$row['Archive_Filename']);
             if (is_file($archivePath)) {
                 $cipher = (string)@file_get_contents($archivePath);
@@ -426,9 +542,13 @@ if (!defined('HW_RECEIPT_BLOCKCHAIN_LOADED')) {
                 'Merkle_Root' => $row['Merkle_Root'],
                 'Prev_Hash' => $row['Prev_Hash'],
                 'Block_Hash' => $row['Block_Hash'],
+                'Attending_Vet_ID' => (int)$row['Attending_Vet_ID'],
+                'Attending_Vet_Name' => $row['Attending_Vet_Name'],
+                'Attending_Clinician_PRC' => $row['Attending_Clinician_PRC'],
+                'Status' => $row['Status'],
                 'Created_At' => $row['Created_At'],
                 'Expires_At' => $row['Expires_At'],
-                'Archive_Active' => !empty($row['Archive_Filename']) && strtotime((string)$row['Expires_At']) > time(),
+                'Archive_Active' => ($row['Status'] === 'ACTIVE') && !empty($row['Archive_Filename']) && strtotime((string)$row['Expires_At']) > time(),
                 'Verified' => hash_equals((string)$row['Merkle_Root'], $recomputedMerkle)
                            && hash_equals((string)$row['Block_Hash'], $recomputedHash),
             ],

@@ -125,8 +125,8 @@ function ws_channel_authorized(array $meta, string $channel): bool
     if (empty($meta['authenticated']) || time() > (int)($meta['token_exp'] ?? 0)) {
         return false;
     }
-    $role = $meta['role'] ?? 'guest';
-    if ($role === 'vet' || $role === 'admin') {
+    $role = hw_normalize_role((string)($meta['role'] ?? 'guest'));
+    if (in_array($role, ['vet_staff', 'head_vet'], true)) {
         return true;
     }
     if ($role === 'owner') {
@@ -151,8 +151,8 @@ function ws_broadcast(array $clients, array $clientMeta, array $packet, ?string 
         }
         if ($channelFilter !== null) {
             $subs = $clientMeta[$id]['channels'] ?? [];
-            $role = $clientMeta[$id]['role'] ?? 'guest';
-            if ($role !== 'vet' && $role !== 'admin' && !in_array($channelFilter, $subs, true)) {
+            $role = hw_normalize_role((string)($clientMeta[$id]['role'] ?? 'guest'));
+            if (!in_array($role, ['vet_staff', 'head_vet'], true) && !in_array($channelFilter, $subs, true)) {
                 continue;
             }
         }
@@ -345,7 +345,7 @@ while (true) {
                     break;
 
                 case 'triage_broadcast':
-                    if (!in_array($clientMeta[$id]['role'], ['vet', 'admin'], true)) {
+                    if (!in_array(hw_normalize_role((string)$clientMeta[$id]['role']), ['vet_staff', 'head_vet'], true)) {
                         break;
                     }
                     ws_broadcast($clients, $clientMeta, [

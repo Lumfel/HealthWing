@@ -319,7 +319,7 @@
             const res = await fetch(apiPath('api/chat_api.php?action=channels'));
             if (!res.ok) {
                 document.getElementById('hwChatMessages').innerHTML =
-                    `<div style="color:#62787B;text-align:center;margin-top:30px;padding:12px;">Sign in as a Pet Owner, Veterinarian, or Admin to use real-time chat & video consults.</div>`;
+                    `<div style="color:#62787B;text-align:center;margin-top:30px;padding:12px;">Sign in as a Pet Owner, Staff Veterinarian, or Head Veterinarian to use real-time chat & video consults.</div>`;
                 return;
             }
             const data = await res.json();

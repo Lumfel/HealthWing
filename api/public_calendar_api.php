@@ -31,8 +31,8 @@ try {
     $engine = new VetSchedulingEngine($conn);
     $currentVetId = null;
     $currentVetName = null;
-    if (isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian') {
-        $vStmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name FROM veterinarian WHERE username = ? LIMIT 1");
+    if (hw_is_vet_role()) {
+        $vStmt = $conn->prepare("SELECT Veterinarian_ID, First_Name, Last_Name FROM veterinarian WHERE username = ? AND Deleted_At IS NULL LIMIT 1");
         $vStmt->bind_param('s', $_SESSION['username']);
         $vStmt->execute();
         if ($vRow = $vStmt->get_result()->fetch_assoc()) {

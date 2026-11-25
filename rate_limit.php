@@ -29,8 +29,10 @@ function rate_limit_check(string $action, int $maxRequests, int $windowSeconds):
         @mkdir($dir, 0755, true);
     }
 
+    $action = preg_replace('/[^a-zA-Z0-9_-]/', '_', $action);
     $ip = hw_get_client_ip();
-    $safeIp = preg_replace('/[^a-zA-Z0-9\.\:]/', '_', $ip);
+    $safeIp = preg_replace('/[^a-zA-Z0-9\.]/', '_', $ip);
+    $safeIp = str_replace(':', '_', $safeIp);
     $file = $dir . '/' . $action . '_' . $safeIp . '.json';
 
     $now = time();
@@ -51,19 +53,22 @@ function rate_limit_check(string $action, int $maxRequests, int $windowSeconds):
     }
 
     $timestamps = array_values(array_filter($timestamps, function ($t) use ($now, $windowSeconds) {
-        return ($now - $t) < $windowSeconds;
+        return is_numeric($t) && ($now - (int)$t) < $windowSeconds;
     }));
 
     if (count($timestamps) >= $maxRequests) {
+        $oldest = min(array_map('intval', $timestamps));
+        $retryAfter = max(1, ($oldest + $windowSeconds) - $now);
         flock($fp, LOCK_UN);
         fclose($fp);
         rate_limit_log_event($action, 'blocked');
         http_response_code(429);
         header('Content-Type: application/json');
-        header('Retry-After: ' . $windowSeconds);
+        header('Retry-After: ' . $retryAfter);
         echo json_encode([
             'success' => false,
             'message' => 'Too many requests. Please wait a bit and try again.',
+            'retry_after' => $retryAfter,
         ]);
         exit();
     }

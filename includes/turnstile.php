@@ -17,10 +17,10 @@ if (!defined('HW_TURNSTILE_LOADED')) {
         $hostHeader = strtolower((string)($_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '')));
         $hostOnly = preg_replace('/:\d+$/', '', $hostHeader);
         $validLocalAddr = in_array($remoteAddr, ['127.0.0.1', '::1'], true);
-        $validLocalHost = in_array($hostOnly, ['localhost', '127.0.0.1', '[::1]'], true)
-            || substr($hostOnly, -5) === '.test'
-            || substr($hostOnly, -6) === '.local';
-        return $validLocalAddr && $validLocalHost;
+        $validLocalHost = in_array($hostOnly, ['localhost', '127.0.0.1', '[::1]'], true);
+        $serverAddr = (string)($_SERVER['SERVER_ADDR'] ?? '');
+        $validServerAddr = $serverAddr === '' || in_array($serverAddr, ['127.0.0.1', '::1'], true);
+        return $validLocalAddr && $validLocalHost && $validServerAddr;
     }
 
     /**
@@ -238,6 +238,20 @@ if (!defined('HW_TURNSTILE_LOADED')) {
                 ];
             }
 
+            $responseHost = strtolower(trim((string)($decoded['hostname'] ?? '')));
+            $requestHost = strtolower(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? ''))));
+            if ($responseHost !== '' && $requestHost !== '' && $responseHost !== $requestHost) {
+                $allowedHosts = array_filter(array_map('strtolower', array_map('trim', explode(',', (string)(getenv('CF_TURNSTILE_ALLOWED_HOSTNAMES') ?: '')))));
+                $allowedHosts[] = $requestHost;
+                if (!in_array($responseHost, $allowedHosts, true)) {
+                    return [
+                        'success' => false,
+                        'error-codes' => ['hostname-mismatch'],
+                        'message' => 'Turnstile challenge hostname mismatch.',
+                    ];
+                }
+            }
+
             hw_set_encrypted_cookie('hw_cf_clearance_gcm', [
                 'verified' => true,
                 'ip' => $ip,
@@ -247,7 +261,7 @@ if (!defined('HW_TURNSTILE_LOADED')) {
 
             return [
                 'success' => true,
-                'hostname' => $decoded['hostname'] ?? 'localhost',
+                'hostname' => $decoded['hostname'] ?? $requestHost,
                 'challenge_ts' => $decoded['challenge_ts'] ?? date('c'),
                 'action' => $resolvedAction,
             ];
@@ -294,10 +308,10 @@ if (!defined('HW_TURNSTILE_LOADED')) {
             exit();
         }
 
-        if (!$cfg['is_local'] && (($_SESSION['admin_role'] ?? '') !== 'Admin')) {
+        if (!function_exists('hw_is_head_vet') || !hw_is_head_vet()) {
             http_response_code(403);
             header('Content-Type: text/plain; charset=UTF-8');
-            echo '403 Forbidden: Administrator authentication is required to access the Turnstile diagnostic console.';
+            echo '403 Forbidden: Head veterinarian authentication is required to access the Turnstile diagnostic console.';
             exit();
         }
 

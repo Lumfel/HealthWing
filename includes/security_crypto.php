@@ -30,12 +30,11 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             @mkdir($outsideDir, 0700, true);
         }
 
-        if (is_dir($outsideDir) && is_writable($outsideDir)) {
-            $keyFile = $outsideDir . DIRECTORY_SEPARATOR . '.hw_master_key';
-        } else {
-            $keyFile = rtrim(sys_get_temp_dir(), "\\/") . DIRECTORY_SEPARATOR . '.healthwing_hw_master_key';
+        if (!is_dir($outsideDir) || !is_writable($outsideDir)) {
+            throw new RuntimeException('Master encryption key directory is unavailable outside webroot.');
         }
 
+        $keyFile = $outsideDir . DIRECTORY_SEPARATOR . '.hw_master_key';
         if (file_exists($keyFile)) {
             $raw = trim((string)@file_get_contents($keyFile));
             if (strlen($raw) === 64 && ctype_xdigit($raw)) {
@@ -102,7 +101,7 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             return $stored;
         }
         if (strpos($stored, 'enc:gcm:') !== 0) {
-            return $stored;
+            return null;
         }
         if (!function_exists('openssl_decrypt')) {
             return null;
@@ -138,19 +137,22 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     function hw_get_client_ip(): string
     {
         $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+        $remoteAddr = filter_var($remoteAddr, FILTER_VALIDATE_IP) ? $remoteAddr : '0.0.0.0';
         $trustedRaw = getenv('HW_TRUSTED_PROXIES');
-        if ($trustedRaw !== false && trim($trustedRaw) !== '') {
-            $trustedProxies = array_filter(array_map('trim', explode(',', $trustedRaw)));
-            if (in_array($remoteAddr, $trustedProxies, true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-                $parts = array_map('trim', explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']));
-                foreach ($parts as $candidate) {
-                    if (filter_var($candidate, FILTER_VALIDATE_IP)) {
-                        return $candidate;
-                    }
+        if ($trustedRaw !== false && trim($trustedRaw) !== '' && in_array($remoteAddr, array_filter(array_map('trim', explode(',', $trustedRaw))), true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $parts = array_values(array_filter(array_map('trim', explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']))));
+            for ($i = count($parts) - 1; $i >= 0; $i--) {
+                $candidate = $parts[$i];
+                if (!filter_var($candidate, FILTER_VALIDATE_IP)) {
+                    continue;
+                }
+                $isTrusted = in_array($candidate, array_filter(array_map('trim', explode(',', $trustedRaw))), true);
+                if (!$isTrusted) {
+                    return $candidate;
                 }
             }
         }
-        return filter_var($remoteAddr, FILTER_VALIDATE_IP) ? $remoteAddr : '0.0.0.0';
+        return $remoteAddr;
     }
 
     /**
@@ -192,14 +194,27 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
         if (empty($_SESSION['username']) && is_array($authCookie)) {
             if (!empty($authCookie['username']) && !empty($authCookie['role'])) {
                 $_SESSION['username'] = $authCookie['username'];
-                $_SESSION['role'] = $authCookie['role'];
+                $_SESSION['role'] = hw_normalize_role((string)$authCookie['role']);
                 if (!empty($authCookie['owner_id'])) {
                     $_SESSION['owner_id'] = (int)$authCookie['owner_id'];
                 }
                 if (!empty($authCookie['vet_id'])) {
                     $_SESSION['vet_id'] = (int)$authCookie['vet_id'];
                 }
+                if (!empty($authCookie['prc_license_no'])) {
+                    $_SESSION['prc_license_no'] = (string)$authCookie['prc_license_no'];
+                }
             }
+        }
+
+        // Legacy standalone admin cookie is retired; clear it to enforce 3-role model.
+        if (!empty($_COOKIE['hw_admin_gcm'])) {
+            hw_clear_encrypted_cookie('hw_admin_gcm');
+        }
+        unset($_SESSION['admin_role'], $_SESSION['admin_id'], $_SESSION['admin_username']);
+
+        if (!empty($_SESSION['username']) && !empty($_SESSION['role'])) {
+            $_SESSION['role'] = hw_normalize_role((string)$_SESSION['role']);
         }
 
         if (!empty($_SESSION['username']) && !empty($_SESSION['role']) && !headers_sent()) {
@@ -214,33 +229,9 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
                     'role' => $_SESSION['role'],
                     'owner_id' => $_SESSION['owner_id'] ?? null,
                     'vet_id' => $_SESSION['vet_id'] ?? null,
+                    'prc_license_no' => $_SESSION['prc_license_no'] ?? null,
                     'ttl' => $desiredTtl,
                 ], $desiredTtl, true);
-            }
-        }
-
-        $adminCookie = hw_get_encrypted_cookie('hw_admin_gcm');
-        if (empty($_SESSION['admin_role']) && is_array($adminCookie)) {
-            if (!empty($adminCookie['admin_id']) && !empty($adminCookie['admin_username'])) {
-                $_SESSION['admin_id'] = (int)$adminCookie['admin_id'];
-                $_SESSION['admin_username'] = $adminCookie['admin_username'];
-                $_SESSION['admin_role'] = 'Admin';
-            }
-        }
-
-        if (!empty($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin' && !headers_sent()) {
-            $lastAdminIssued = is_array($adminCookie) ? (int)($adminCookie['iat'] ?? 0) : 0;
-            $adminTtl = is_array($adminCookie) ? (int)($adminCookie['ttl'] ?? HW_COOKIE_REMEMBER_TTL) : HW_COOKIE_REMEMBER_TTL;
-            if ($adminTtl < HW_COOKIE_REMEMBER_TTL) {
-                $adminTtl = HW_COOKIE_REMEMBER_TTL;
-            }
-            if ((time() - $lastAdminIssued) > 3600 && !empty($_SESSION['admin_id'])) {
-                hw_set_encrypted_cookie('hw_admin_gcm', [
-                    'admin_id' => (int)$_SESSION['admin_id'],
-                    'admin_username' => $_SESSION['admin_username'] ?? 'admin',
-                    'admin_role' => 'Admin',
-                    'ttl' => $adminTtl,
-                ], $adminTtl, true);
             }
         }
     }
@@ -310,11 +301,72 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     }
 
     /**
+     * Normalizes legacy and canonical role names to the strict 3-role model.
+     */
+    function hw_normalize_role(string $role): string
+    {
+        $raw = strtolower(trim($role));
+        $map = [
+            'owner' => 'owner',
+            'vet_staff' => 'vet_staff',
+            'veterinarian' => 'vet_staff',
+            'staff' => 'vet_staff',
+            'vet' => 'vet_staff',
+            'head_vet' => 'head_vet',
+            'head vet' => 'head_vet',
+            'admin' => 'head_vet',
+        ];
+        return $map[$raw] ?? $raw;
+    }
+
+    function hw_session_role(): string
+    {
+        return hw_normalize_role((string)($_SESSION['role'] ?? ''));
+    }
+
+    function hw_require_role(array $allowedRoles, bool $json = false, ?string $redirectUrl = null): void
+    {
+        hw_start_secure_session();
+        $normalizedAllowed = array_values(array_unique(array_map(static function ($r) {
+            return hw_normalize_role((string)$r);
+        }, $allowedRoles)));
+        $role = hw_session_role();
+        if ($role !== '' && in_array($role, $normalizedAllowed, true)) {
+            return;
+        }
+        if ($json) {
+            http_response_code($role === '' ? 401 : 403);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'status' => 'error',
+                'error' => $role === '' ? 'Authentication required.' : 'Forbidden: insufficient role permissions.',
+                'message' => $role === '' ? 'Authentication required.' : 'Forbidden: insufficient role permissions.',
+            ]);
+            exit;
+        }
+        if ($redirectUrl !== null && $role === '') {
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        http_response_code($role === '' ? 401 : 403);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo $role === '' ? '401 Unauthorized: Please sign in.' : '403 Forbidden: Insufficient permissions.';
+        exit;
+    }
+
+    function hw_is_owner(): bool { return hw_session_role() === 'owner'; }
+    function hw_is_vet_staff(): bool { return hw_session_role() === 'vet_staff'; }
+    function hw_is_head_vet(): bool { return hw_session_role() === 'head_vet'; }
+    function hw_is_vet_role(): bool { return in_array(hw_session_role(), ['vet_staff', 'head_vet'], true); }
+
+    /**
      * Generates a short-lived HMAC-SHA256 signed token for WebSocket authentication.
      */
     function hw_generate_ws_token(string $role, int $userId, string $name, array $channels = [], int $ttl = 600): string
     {
-        $allowedRoles = ['owner', 'vet', 'admin'];
+        $role = hw_normalize_role($role);
+        $allowedRoles = ['owner', 'vet_staff', 'head_vet'];
         if (!in_array($role, $allowedRoles, true)) {
             throw new InvalidArgumentException('Invalid WebSocket role.');
         }
@@ -377,11 +429,12 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             return null;
         }
 
-        $role = $payload['role'] ?? '';
+        $role = hw_normalize_role((string)($payload['role'] ?? ''));
         $exp = (int)($payload['exp'] ?? 0);
-        if (!in_array($role, ['owner', 'vet', 'admin'], true) || $exp < time()) {
+        if (!in_array($role, ['owner', 'vet_staff', 'head_vet'], true) || $exp < time()) {
             return null;
         }
+        $payload['role'] = $role;
 
         return $payload;
     }
@@ -427,15 +480,23 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
         if (empty($_COOKIE[$name])) {
             return null;
         }
-        $decrypted = hw_decrypt_gcm($_COOKIE[$name], 'cookie:' . $name);
+        $raw = (string)$_COOKIE[$name];
+        if (strpos($raw, 'enc:gcm:') !== 0) {
+            hw_clear_encrypted_cookie($name);
+            return null;
+        }
+        $decrypted = hw_decrypt_gcm($raw, 'cookie:' . $name);
         if (!$decrypted) {
+            hw_clear_encrypted_cookie($name);
             return null;
         }
         $data = json_decode($decrypted, true);
         if (!is_array($data)) {
+            hw_clear_encrypted_cookie($name);
             return null;
         }
-        if (isset($data['exp']) && $data['exp'] < time()) {
+        if (isset($data['exp']) && (int)$data['exp'] < time()) {
+            hw_clear_encrypted_cookie($name);
             return null;
         }
         return $data;

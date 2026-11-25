@@ -6,11 +6,7 @@ require_once __DIR__ . '/includes/db.php';
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
-    http_response_code(401);
-    echo json_encode(['success'=> false, 'message'=>'Not logged in.']);
-    exit();
-}
+hw_require_role(['owner'], true);
 
 try {
     $conn = hw_get_db();

@@ -1,7 +1,7 @@
 <?php
 $ADMIN_GUARD_IS_API = false;
 require_once __DIR__ . '/auth_guard.php';
-$admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', ENT_QUOTES);
+$admin_display_name = htmlspecialchars($_SESSION['username'] ?? 'Head Vet', ENT_QUOTES);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -68,11 +68,11 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
                 <input type="text" id="username" name="username" placeholder="Username"required />
                 <input type="email" id="email" name="email" placeholder="Email"required />
                 <input type="password" id="password" name="password" placeholder="Initial Password"required />
-                <select id="role" name="role"required onchange="document.getElementById('specWrap').style.display = this.value === 'Veterinarian'? 'inline-block': 'none';">
+                <select id="role" name="role"required onchange="document.getElementById('specWrap').style.display = this.value === 'Veterinarian'? 'inline-flex': 'none';">
                     <option value="Owner">Owner</option>
                     <option value="Veterinarian">Veterinarian</option>
                 </select>
-                <span id="specWrap" style="display:none;">
+                <span id="specWrap" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;">
                     <select id="specialties" name="specialties">
                         <option value="General">Specialty: General</option>
                         <option value="Surgery">Specialty: Surgery</option>
@@ -80,6 +80,11 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
                         <option value="Wellness">Specialty: Wellness & Vaccination</option>
                         <option value="Emergency">Specialty: Emergency & Critical Care</option>
                     </select>
+                    <select id="role_level" name="role_level">
+                        <option value="vet_staff">Role: Staff Vet</option>
+                        <option value="head_vet">Role: Head Vet</option>
+                    </select>
+                    <input type="text" id="prc_license_no" name="prc_license_no" placeholder="PRC License No. (e.g. PRC-VET-005001)" />
                 </span>
                 <button class="btn btn-primary" type="submit">+ Add User</button>
             </form>
@@ -116,10 +121,12 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
     document.addEventListener("DOMContentLoaded", function () {
         const tableBody = document.querySelector(".crud-table tbody");
 
-        function roleBadge(role, spec) {
+        function roleBadge(role, spec, roleLevel, prc) {
             const cls = role === 'Veterinarian'? 'badge-neutral': 'badge-good';
-            const specText = (role === 'Veterinarian'&& spec) ? `· ${spec}`: '';
-            return `<span class="badge ${cls}">${role}${specText}</span>`;
+            const lvl = role === 'Veterinarian' ? (roleLevel === 'head_vet' ? 'Head Vet' : 'Staff Vet') : role;
+            const specText = (role === 'Veterinarian' && spec) ? ` · ${spec}` : '';
+            const prcText = (role === 'Veterinarian' && prc) ? ` · ${prc}` : '';
+            return `<span class="badge ${cls}">${lvl}${specText}${prcText}</span>`;
         }
 
         function statusBadge(status) {
@@ -144,7 +151,7 @@ $admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', E
                             <td><strong>${user.name}</strong></td>
                             <td>${user.username || '—'}</td>
                             <td>${user.email || '—'}</td>
-                            <td>${roleBadge(user.role, user.specialties)}</td>
+                            <td>${roleBadge(user.role, user.specialties, user.role_level, user.prc_license_no)}</td>
                             <td>${statusBadge(user.status)}</td>
                             <td>
                                 ${isPendingVet ? `

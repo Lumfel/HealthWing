@@ -1,7 +1,7 @@
 <?php
 $ADMIN_GUARD_IS_API = false;
 require_once __DIR__ . '/auth_guard.php';
-$admin_display_name = htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', ENT_QUOTES);
+$admin_display_name = htmlspecialchars($_SESSION['username'] ?? 'Head Vet', ENT_QUOTES);
 ?>
 <!DOCTYPE html>
 <html lang="en">

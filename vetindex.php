@@ -15,7 +15,7 @@ require_once __DIR__ . '/guest_notice.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/scheduling_engine.php';
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'Veterinarian') {
+if (!hw_is_vet_role()) {
     show_guest_notice("You need to sign in as a veterinarian to access the Veterinarian Clinical Workstation.");
     exit();
 }
@@ -36,8 +36,8 @@ $currentVet = $vStmt->get_result()->fetch_assoc();
 $vStmt->close();
 $currentVetId = $currentVet ? (int)$currentVet['Veterinarian_ID'] : 0;
 
-// Auto-clean resolved emergencies older than 24h
-$conn->query("DELETE FROM emergency_booking WHERE Resolved_At IS NOT NULL AND Resolved_At < (NOW() - INTERVAL 1 DAY)");
+// Soft-archive resolved emergencies older than 24h instead of hard-deleting clinical history
+$conn->query("UPDATE emergency_booking SET Deleted_At = NOW() WHERE Resolved_At IS NOT NULL AND Deleted_At IS NULL AND Resolved_At < (NOW() - INTERVAL 1 DAY)");
 
 // Fetch prioritized emergencies
 $sqlEm = "SELECT e.*,
@@ -46,6 +46,7 @@ $sqlEm = "SELECT e.*,
           FROM emergency_booking e
           LEFT JOIN veterinarian v ON e.Assigned_Vet_ID = v.Veterinarian_ID
           LEFT JOIN room r ON e.Assigned_Room_ID = r.Room_ID
+          WHERE e.Deleted_At IS NULL
           ORDER BY
               CASE WHEN e.Status IN ('Pending', 'In Progress') THEN 0 ELSE 1 END ASC,
               COALESCE(e.Queue_Position, 9999) ASC,

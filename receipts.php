@@ -5,24 +5,17 @@
 require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 
-$isAdmin = isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'Admin';
-$isVet = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'Veterinarian';
-$isOwner = isset($_SESSION['username']) && ($_SESSION['role'] ?? '') === 'owner';
+hw_require_role(['owner', 'vet_staff', 'head_vet'], false, 'login.php');
 
-if (!$isAdmin && !$isVet && !$isOwner) {
-    header('Location: login.php');
-    exit;
-}
-
-$viewerRole = $isAdmin ? 'admin' : ($isVet ? 'vet' : 'owner');
-$viewerUser = $isAdmin ? ($_SESSION['admin_username'] ?? 'admin') : ($_SESSION['username'] ?? 'user');
+$viewerRole = hw_session_role();
+$viewerUser = (string)($_SESSION['username'] ?? 'user');
 $csrfToken = hw_csrf_token();
 
 $owners = [];
-if ($viewerRole !== 'owner') {
+if (hw_is_vet_role()) {
     try {
         $conn = hw_get_db();
-        $oRes = $conn->query("SELECT Owner_ID, First_Name, Last_Name FROM owner ORDER BY First_Name ASC");
+        $oRes = $conn->query("SELECT Owner_ID, First_Name, Last_Name FROM owner WHERE Deleted_At IS NULL ORDER BY First_Name ASC");
         if ($oRes) {
             $owners = $oRes->fetch_all(MYSQLI_ASSOC);
         }
@@ -157,15 +150,17 @@ if ($viewerRole !== 'owner') {
                         <th>Block</th>
                         <th>Receipt Code</th>
                         <th>Service</th>
+                        <th>Attending Clinician</th>
                         <th>Amount</th>
                         <th>Merkle Root</th>
+                        <th>Status</th>
                         <th>Issued</th>
                         <th>Expires</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="receiptRows">
-                    <tr><td colspan="8">Loading receipt blocks...</td></tr>
+                    <tr><td colspan="10">Loading receipt blocks...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -199,21 +194,29 @@ async function loadReceipts() {
     const data = await res.json();
     const tbody = document.getElementById('receiptRows');
     if (!data.success || !Array.isArray(data.receipts) || data.receipts.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#62787B;">No active receipts in ledger yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#62787B;">No active receipts in ledger yet.</td></tr>';
         return;
     }
-    tbody.innerHTML = data.receipts.map(r => `
+    tbody.innerHTML = data.receipts.map(r => {
+        const status = r.Status || 'ACTIVE';
+        const statusCls = status === 'ACTIVE' ? 'badge-ok' : 'badge-warn';
+        const vetLabel = r.Attending_Vet_Name
+            ? `${escapeHtml(r.Attending_Vet_Name)}${r.Attending_Clinician_PRC ? ' (' + escapeHtml(r.Attending_Clinician_PRC) + ')' : ''}`
+            : 'Verified Clinician';
+        return `
         <tr>
             <td>#${Number(r.Block_Index)}</td>
             <td><strong>${escapeHtml(r.Receipt_Code)}</strong></td>
             <td>${escapeHtml(r.Service_Summary)}</td>
+            <td>${vetLabel}</td>
             <td>PHP ${Number(r.Amount).toFixed(2)}</td>
             <td><code class="hash">${escapeHtml(String(r.Merkle_Root).slice(0, 16))}...</code></td>
+            <td><span class="badge ${statusCls}">${escapeHtml(status)}</span></td>
             <td>${escapeHtml(r.Created_At)}</td>
             <td>${escapeHtml(r.Expires_At)}</td>
             <td><button type="button" class="btn btn-accent" onclick="viewReceipt(${Number(r.Block_ID)})">Protected View</button></td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 async function verifyChain() {
@@ -252,10 +255,11 @@ async function viewReceipt(blockId) {
 
     document.getElementById('protectedReceiptBody').innerHTML = `
         <div style="font-size:13px;line-height:1.55;">
-            <div><strong>Receipt Code:</strong> ${escapeHtml(block.Receipt_Code)}</div>
+            <div><strong>Receipt Code:</strong> ${escapeHtml(block.Receipt_Code)} &middot; <strong>Ledger Status:</strong> ${escapeHtml(block.Status || 'ACTIVE')}</div>
             <div><strong>Owner:</strong> ${escapeHtml(receipt.owner_name)} &middot; <strong>Pet:</strong> ${escapeHtml(receipt.pet_name)}</div>
+            <div><strong>Attending Clinician:</strong> ${escapeHtml(block.Attending_Vet_Name || receipt.attending_vet_name || 'Verified Veterinarian')} (${escapeHtml(block.Attending_Clinician_PRC || receipt.attending_clinician_prc || 'PRC Verified')})</div>
             <div><strong>Issued By:</strong> ${escapeHtml(receipt.issued_by)} &middot; <strong>Issued:</strong> ${escapeHtml(block.Created_At)}</div>
-            <div><strong>365-Day Encrypted Archive:</strong> ${block.Archive_Active ? 'Active' : 'Expired'} (Expires ${escapeHtml(block.Expires_At)})</div>
+            <div><strong>365-Day Encrypted Archive:</strong> ${block.Archive_Active ? 'Active' : 'Purged (1-Year Retention Elapsed)'} (Expires ${escapeHtml(block.Expires_At)})</div>
             <div style="margin:12px 0;padding:10px 12px;background:#F8FCFD;border:1px solid #D5E3E6;border-radius:10px;">
                 ${itemsHtml}
                 <div style="display:flex;justify-content:space-between;padding-top:8px;font-size:15px;">

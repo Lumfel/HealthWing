@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 require_once __DIR__ . '/guest_notice.php';
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
+if (!hw_is_owner()) {
     show_guest_notice("You need to sign in as a pet owner to rate a service.");
     exit();
 }

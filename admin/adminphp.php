@@ -1,6 +1,7 @@
 <?php
 /**
- * HealthWing / VetSystem — Admin User Management API (admin/adminphp.php)
+ * HealthWing / VetSystem — Head Vet User Management API (admin/adminphp.php)
+ * Enforces cross-table username/email uniqueness, PRC_License_No, Role_Level, and RA 10173 soft-delete.
  */
 $ADMIN_GUARD_IS_API = true;
 require_once __DIR__ . '/auth_guard.php';
@@ -26,13 +27,15 @@ try {
         $result = $conn->query(
             "SELECT Owner_ID AS id, CONCAT(First_Name, ' ', COALESCE(Last_Name, '')) AS name,
                     First_Name, Last_Name, username, email, Contact AS contact,
-                    '' AS specialties, 'Owner' AS role, 'Approved' AS status
+                    '' AS specialties, '' AS prc_license_no, 'owner' AS role_level, 'Owner' AS role, 'Approved' AS status
              FROM owner
+             WHERE Deleted_At IS NULL
              UNION ALL
              SELECT Veterinarian_ID AS id, CONCAT(First_Name, ' ', COALESCE(Last_Name, '')) AS name,
                     First_Name, Last_Name, username, email, Contact AS contact,
-                    COALESCE(Specialties, 'General') AS specialties, 'Veterinarian' AS role, COALESCE(Status, 'Approved') AS status
-             FROM veterinarian"
+                    COALESCE(Specialties, 'General') AS specialties, PRC_License_No AS prc_license_no, Role_Level AS role_level, 'Veterinarian' AS role, COALESCE(Status, 'Approved') AS status
+             FROM veterinarian
+             WHERE Deleted_At IS NULL"
         );
         if (!$result) {
             throw new Exception("Unable to load user directory.");
@@ -46,7 +49,7 @@ try {
             $firstName = $parts[0];
             $lastName = $parts[1];
         }
-        $email = trim((string)($_POST['email'] ?? ''));
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
         $username = trim((string)($_POST['username'] ?? ''));
         if ($username === '' && $email !== '') {
             $username = explode('@', $email)[0];
@@ -56,13 +59,31 @@ try {
         $contact = trim((string)($_POST['contact'] ?? ''));
         $specialties = trim((string)($_POST['specialties'] ?? 'General'));
         $role = $_POST['role'] ?? '';
+        $roleLevel = in_array($_POST['role_level'] ?? 'vet_staff', ['head_vet', 'vet_staff'], true) ? $_POST['role_level'] : 'vet_staff';
+        $prcLicense = strtoupper(trim((string)($_POST['prc_license_no'] ?? '')));
+
+        $chk = $conn->prepare("
+            SELECT username FROM owner WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+            UNION
+            SELECT username FROM veterinarian WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+        ");
+        $chk->bind_param("ssss", $username, $email, $username, $email);
+        $chk->execute();
+        $dup = $chk->get_result()->num_rows > 0;
+        $chk->close();
+        if ($dup) {
+            throw new Exception("Username or email already exists.");
+        }
 
         if ($role === 'Owner') {
             $stmt = $conn->prepare("INSERT INTO owner (First_Name, Last_Name, Contact, username, email, password) VALUES (?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("ssssss", $firstName, $lastName, $contact, $username, $email, $passHash);
         } elseif ($role === 'Veterinarian') {
-            $stmt = $conn->prepare("INSERT INTO veterinarian (First_Name, Last_Name, Contact, Specialties, username, email, password, Status) VALUES (?, ?, ?, ?, ?, ?, ?, 'Approved')");
-            $stmt->bind_param("sssssss", $firstName, $lastName, $contact, $specialties, $username, $email, $passHash);
+            if ($prcLicense === '') {
+                $prcLicense = 'PRC-VET-' . strtoupper(bin2hex(random_bytes(3)));
+            }
+            $stmt = $conn->prepare("INSERT INTO veterinarian (First_Name, Last_Name, Contact, Specialties, Role_Level, PRC_License_No, username, email, password, Status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Approved')");
+            $stmt->bind_param("sssssssss", $firstName, $lastName, $contact, $specialties, $roleLevel, $prcLicense, $username, $email, $passHash);
         } else {
             throw new Exception("Invalid role");
         }
@@ -79,7 +100,7 @@ try {
         if (strpos($name, ' ') !== false) {
             [$firstName, $lastName] = explode(' ', $name, 2);
         }
-        $email = trim((string)($_POST['email'] ?? ''));
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
         $specialties = trim((string)($_POST['specialties'] ?? ''));
         $role = $_POST['role'] ?? '';
 
@@ -98,18 +119,22 @@ try {
         $stmt->close();
         echo json_encode(["status" => "success"]);
     } elseif ($action === 'delete') {
+        // RA 10173 Soft-delete / PII anonymization preserving clinical history FKs
         $id = (int)($_POST['id'] ?? 0);
         $role = $_POST['role'] ?? '';
         if ($role === 'Owner') {
-            $stmt = $conn->prepare("DELETE FROM owner WHERE Owner_ID=?");
+            $anonTag = 'erased_' . $id . '_' . time();
+            $anonEmail = $anonTag . '@anonymized.local';
+            $stmt = $conn->prepare("UPDATE owner SET First_Name='Erased', Last_Name='Owner', Address=NULL, Contact=NULL, username=?, email=?, Deleted_At=NOW(), Anonymized_At=NOW() WHERE Owner_ID=?");
+            $stmt->bind_param("ssi", $anonTag, $anonEmail, $id);
         } elseif ($role === 'Veterinarian') {
-            $stmt = $conn->prepare("DELETE FROM veterinarian WHERE Veterinarian_ID=?");
+            $stmt = $conn->prepare("UPDATE veterinarian SET Status='Inactive', Is_Available=0, Deleted_At=NOW() WHERE Veterinarian_ID=?");
+            $stmt->bind_param("i", $id);
         } else {
             throw new Exception("Invalid role");
         }
-        $stmt->bind_param("i", $id);
         if (!$stmt->execute()) {
-            throw new Exception("Could not remove account.");
+            throw new Exception("Could not archive account.");
         }
         $stmt->close();
         echo json_encode(["status" => "success"]);

@@ -14,7 +14,7 @@ require_once __DIR__ . '/guest_notice.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/scheduling_engine.php';
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'owner') {
+if (!hw_is_owner()) {
     show_guest_notice("You need to sign in as a pet owner to view your bookings and live emergency triage status.");
     exit();
 }

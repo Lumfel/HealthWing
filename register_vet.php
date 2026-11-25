@@ -53,6 +53,9 @@ $csrfToken = hw_csrf_token();
                 <label for="specialties" class="block text-gray-700 font-medium">Clinical Specialties</label>
                 <input type="text" id="specialties" name="specialties" placeholder="e.g., Surgery, Dental, Preventive Care" required />
 
+                <label for="prc_license_no" class="block text-gray-700 font-medium">PRC License Number</label>
+                <input type="text" id="prc_license_no" name="prc_license_no" placeholder="e.g., PRC-VET-005412" required />
+
                 <div style="margin: 10px 0; display: flex; justify-content: center;">
                     <?php echo hw_turnstile_render_widget('signup'); ?>
                 </div>

@@ -3,11 +3,7 @@ require_once __DIR__ . '/includes/db.php';
 hw_start_secure_session();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['username']) || ($_SESSION['role'] ?? '') !== 'Veterinarian') {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Not logged in as a veterinarian.']);
-    exit();
-}
+hw_require_role(['vet_staff', 'head_vet'], true);
 
 try {
     $conn = hw_get_db();
