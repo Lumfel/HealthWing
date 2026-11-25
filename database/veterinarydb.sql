@@ -4,7 +4,7 @@
 -- 3-Role RBAC Model (standalone admin table retired):
 --   1. Pet Owner (`owner`):                   user / User@1234     (user@healthwing.local)
 --   2. Staff Veterinarian (`vet_staff`):      vet / Vet@1234       (vet@healthwing.local, PRC-VET-004821)
---   3. Head Veterinarian (`head_vet`):        headvet / Admin@1234 (headvet@healthwing.local, PRC-VET-001001)
+--   3. Head Veterinarian (`head_vet`):        headvet (headvet@healthwing.local, PRC-VET-001001) - seeded by includes/db.php when empty; set a strong password before deployment.
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -304,7 +304,7 @@ CREATE TABLE `chat_messages` (
   `Channel_Key` varchar(64) NOT NULL,
   `Booking_ID` int(11) DEFAULT NULL,
   `Schedule_ID` int(11) DEFAULT NULL,
-  `Sender_Role` enum('owner','vet_staff','head_vet','vet','admin','system') NOT NULL DEFAULT 'owner',
+  `Sender_Role` enum('owner','vet_staff','head_vet','system') NOT NULL DEFAULT 'owner',
   `Sender_ID` int(11) DEFAULT NULL,
   `Sender_Name` varchar(100) NOT NULL,
   `Message_Text` text NOT NULL,

@@ -73,7 +73,7 @@ if (!function_exists('hw_nav_active')) {
         <a href="contact.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;transition:0.15s;<?php echo hw_nav_active(['contact.php'], $hwCurrentPage); ?>">Contact</a>
 
         <?php if ($hwIsHeadVet): ?>
-          <a href="admin/ADMIN_VET_1.php" style="padding:8px 12px;border-radius:8px;text-decoration:none;background:#E3A857;color:#16262A;font-weight:700;">Head Vet Console</a>
+          <a href="vetindex.php?tab=governance" style="padding:8px 12px;border-radius:8px;text-decoration:none;background:#E3A857;color:#16262A;font-weight:700;">Head Vet Console</a>
         <?php endif; ?>
       </nav>
 

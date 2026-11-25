@@ -54,6 +54,7 @@ function ws_encode_frame(string $payload, int $opcode = 0x1): string
 function ws_decode_frames(string &$buffer): array
 {
     $messages = [];
+    $maxPayload = 65536;
     while (strlen($buffer) >= 2) {
         $firstByte = ord($buffer[0]);
         $secondByte = ord($buffer[1]);
@@ -76,6 +77,10 @@ function ws_decode_frames(string &$buffer): array
             $offset = 10;
         }
 
+        if ($payloadLen > $maxPayload) {
+            return [['opcode' => 0x8, 'payload' => '', 'error' => 'frame_too_large']];
+        }
+
         $maskKey = '';
         if ($isMasked) {
             if (strlen($buffer) < $offset + 4) {
@@ -83,6 +88,8 @@ function ws_decode_frames(string &$buffer): array
             }
             $maskKey = substr($buffer, $offset, 4);
             $offset += 4;
+        } else {
+            return [['opcode' => 0x8, 'payload' => '', 'error' => 'unmasked_frame']];
         }
 
         if (strlen($buffer) < $offset + $payloadLen) {
@@ -92,21 +99,47 @@ function ws_decode_frames(string &$buffer): array
         $data = substr($buffer, $offset, $payloadLen);
         $buffer = substr($buffer, $offset + $payloadLen);
 
-        if ($isMasked) {
-            $unmasked = '';
-            for ($i = 0; $i < $payloadLen; $i++) {
-                $unmasked .= $data[$i] ^ $maskKey[$i % 4];
-            }
-            $data = $unmasked;
+        $unmasked = '';
+        for ($i = 0; $i < $payloadLen; $i++) {
+            $unmasked .= $data[$i] ^ $maskKey[$i % 4];
         }
+        $data = $unmasked;
 
         $messages[] = ['opcode' => $opcode, 'payload' => $data];
     }
     return $messages;
 }
 
+function ws_origin_allowed(string $headers): bool
+{
+    if (!preg_match('/Origin:\s*(.+)\r\n/i', $headers, $originMatch)) {
+        return false;
+    }
+    $origin = trim($originMatch[1]);
+    $allowed = array_filter(array_map('trim', explode(',', (string)(getenv('HW_WS_ALLOWED_ORIGINS') ?: ''))));
+    if (!empty($allowed)) {
+        return in_array($origin, $allowed, true);
+    }
+    $host = '';
+    if (preg_match('/Host:\s*(.+)\r\n/i', $headers, $hostMatch)) {
+        $host = trim($hostMatch[1]);
+    }
+    $originParts = parse_url($origin);
+    $originHost = strtolower((string)($originParts['host'] ?? ''));
+    if ($originHost === '') {
+        return false;
+    }
+    $originPort = isset($originParts['port']) ? ':' . $originParts['port'] : '';
+    $originAuthority = $originHost . $originPort;
+    $hostNorm = strtolower($host);
+    return $hostNorm !== '' && ($originAuthority === $hostNorm || $originHost === preg_replace('/:\d+$/', '', $hostNorm));
+}
+
 function ws_perform_handshake($client, string $headers): bool
 {
+    if (!ws_origin_allowed($headers)) {
+        return false;
+    }
     if (!preg_match('/Sec-WebSocket-Key:\s*(.+)\r\n/i', $headers, $matches)) {
         return false;
     }
@@ -204,6 +237,11 @@ while (true) {
 
         if (!$clientMeta[$id]['handshaked']) {
             $clientMeta[$id]['buffer'] .= $chunk;
+            if (strlen($clientMeta[$id]['buffer']) > 65536) {
+                @fclose($sock);
+                unset($clients[$id], $clientMeta[$id]);
+                continue;
+            }
             if (strpos($clientMeta[$id]['buffer'], "\r\n\r\n") !== false) {
                 if (ws_perform_handshake($sock, $clientMeta[$id]['buffer'])) {
                     $clientMeta[$id]['handshaked'] = true;
@@ -222,6 +260,11 @@ while (true) {
         }
 
         $clientMeta[$id]['buffer'] .= $chunk;
+        if (strlen($clientMeta[$id]['buffer']) > 65536) {
+            @fclose($sock);
+            unset($clients[$id], $clientMeta[$id]);
+            continue;
+        }
         $frames = ws_decode_frames($clientMeta[$id]['buffer']);
 
         foreach ($frames as $frame) {
@@ -296,7 +339,12 @@ while (true) {
                 case 'chat_message':
                     $ch = trim((string)($msg['channel_key'] ?? ''));
                     $text = trim((string)($msg['message_text'] ?? ''));
+                    $msgType = in_array($msg['message_type'] ?? 'text', ['text', 'system_alert', 'triage_notice', 'call_event'], true) ? $msg['message_type'] : 'text';
+                    $senderRole = hw_normalize_role((string)$clientMeta[$id]['role']);
                     if ($ch === '' || $text === '' || !ws_channel_authorized($clientMeta[$id], $ch)) {
+                        break;
+                    }
+                    if (in_array($msgType, ['system_alert', 'triage_notice'], true) && !in_array($senderRole, ['vet_staff', 'head_vet'], true)) {
                         break;
                     }
                     ws_broadcast($clients, $clientMeta, [
@@ -304,11 +352,11 @@ while (true) {
                         'channel_key' => $ch,
                         'message' => [
                             'Channel_Key' => $ch,
-                            'Sender_Role' => $clientMeta[$id]['role'],
+                            'Sender_Role' => $senderRole,
                             'Sender_ID' => $clientMeta[$id]['user_id'],
                             'Sender_Name' => $clientMeta[$id]['name'],
                             'Message_Text' => $text,
-                            'Message_Type' => in_array($msg['message_type'] ?? 'text', ['text', 'system_alert', 'triage_notice', 'call_event'], true) ? $msg['message_type'] : 'text',
+                            'Message_Type' => $msgType,
                             'Created_At' => date('Y-m-d H:i:s'),
                         ],
                     ], $ch);
@@ -327,18 +375,20 @@ while (true) {
                     break;
 
                 case 'webrtc_signal':
-                    $bookingId = !empty($msg['booking_id']) ? (int)$msg['booking_id'] : null;
-                    $ch = $bookingId ? ('booking_' . $bookingId) : null;
-                    if ($ch !== null && !ws_channel_authorized($clientMeta[$id], $ch)) {
+                    $bookingId = (int)($msg['booking_id'] ?? 0);
+                    $ch = $bookingId > 0 ? ('booking_' . $bookingId) : '';
+                    $signalType = trim((string)($msg['signal_type'] ?? 'ice'));
+                    $allowedSignals = ['offer', 'answer', 'ice', 'hangup', 'decline', 'busy'];
+                    if ($bookingId <= 0 || $ch === '' || !in_array($signalType, $allowedSignals, true) || !ws_channel_authorized($clientMeta[$id], $ch)) {
                         break;
                     }
                     ws_broadcast($clients, $clientMeta, [
                         'type' => 'webrtc_signal',
-                        'signal_type' => $msg['signal_type'] ?? 'ice',
+                        'signal_type' => $signalType,
                         'booking_id' => $bookingId,
                         'call_id' => $msg['call_id'] ?? null,
-                        'call_type' => $msg['call_type'] ?? 'video',
-                        'sender_role' => $clientMeta[$id]['role'],
+                        'call_type' => in_array(($msg['call_type'] ?? 'video'), ['video', 'audio'], true) ? $msg['call_type'] : 'video',
+                        'sender_role' => hw_normalize_role((string)$clientMeta[$id]['role']),
                         'sender_name' => $clientMeta[$id]['name'],
                         'payload' => $msg['payload'] ?? null,
                     ], $ch, $id);

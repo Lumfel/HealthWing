@@ -360,6 +360,35 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     function hw_is_head_vet(): bool { return hw_session_role() === 'head_vet'; }
     function hw_is_vet_role(): bool { return in_array(hw_session_role(), ['vet_staff', 'head_vet'], true); }
 
+    function hw_log_consent(mysqli $conn, ?int $userId, string $role, string $action, ?string $contextType = null, ?string $contextId = null): void
+    {
+        try {
+            @$conn->query("CREATE TABLE IF NOT EXISTS consent_log (Consent_ID int AUTO_INCREMENT PRIMARY KEY, User_ID int NULL, Role varchar(32) NOT NULL, Action varchar(64) NOT NULL, Context_Type varchar(64) NULL, Context_ID varchar(64) NULL, IP_Address varchar(45) NULL, User_Agent varchar(255) NULL, Consented_At timestamp NOT NULL DEFAULT current_timestamp()) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $stmt = $conn->prepare("INSERT INTO consent_log (User_ID, Role, Action, Context_Type, Context_ID, IP_Address, User_Agent) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            if ($stmt) {
+                $ip = function_exists('hw_get_client_ip') ? hw_get_client_ip() : ($_SERVER['REMOTE_ADDR'] ?? '');
+                $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
+                $stmt->bind_param('issssss', $userId, $role, $action, $contextType, $contextId, $ip, $ua);
+                $stmt->execute();
+                $stmt->close();
+            }
+        } catch (Throwable $e) { /* logging must not break flow */ }
+    }
+
+    function hw_log_audit(mysqli $conn, ?int $actorId, string $actorRole, string $action, ?string $targetType = null, ?string $targetId = null, ?string $details = null): void
+    {
+        try {
+            @$conn->query("CREATE TABLE IF NOT EXISTS audit_log (Audit_ID int AUTO_INCREMENT PRIMARY KEY, Actor_ID int NULL, Actor_Role varchar(32) NOT NULL, Action varchar(128) NOT NULL, Target_Type varchar(64) NULL, Target_ID varchar(64) NULL, Details text NULL, IP_Address varchar(45) NULL, Created_At timestamp NOT NULL DEFAULT current_timestamp()) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $stmt = $conn->prepare("INSERT INTO audit_log (Actor_ID, Actor_Role, Action, Target_Type, Target_ID, Details, IP_Address) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            if ($stmt) {
+                $ip = function_exists('hw_get_client_ip') ? hw_get_client_ip() : ($_SERVER['REMOTE_ADDR'] ?? '');
+                $stmt->bind_param('issssss', $actorId, $actorRole, $action, $targetType, $targetId, $details, $ip);
+                $stmt->execute();
+                $stmt->close();
+            }
+        } catch (Throwable $e) { /* logging must not break flow */ }
+    }
+
     /**
      * Generates a short-lived HMAC-SHA256 signed token for WebSocket authentication.
      */

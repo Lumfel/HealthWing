@@ -158,6 +158,36 @@ if (!function_exists('hw_get_db')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
         }
 
+        @$conn->query("CREATE TABLE IF NOT EXISTS `consent_log` (
+            `Consent_ID` int(11) NOT NULL AUTO_INCREMENT,
+            `User_ID` int(11) DEFAULT NULL,
+            `Role` varchar(32) NOT NULL DEFAULT 'guest',
+            `Action` varchar(64) NOT NULL,
+            `Context_Type` varchar(64) DEFAULT NULL,
+            `Context_ID` varchar(64) DEFAULT NULL,
+            `IP_Address` varchar(45) DEFAULT NULL,
+            `User_Agent` varchar(255) DEFAULT NULL,
+            `Consented_At` timestamp NOT NULL DEFAULT current_timestamp(),
+            PRIMARY KEY (`Consent_ID`),
+            KEY `idx_consent_user` (`User_ID`, `Role`),
+            KEY `idx_consent_action` (`Action`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        @$conn->query("CREATE TABLE IF NOT EXISTS `audit_log` (
+            `Audit_ID` int(11) NOT NULL AUTO_INCREMENT,
+            `Actor_ID` int(11) DEFAULT NULL,
+            `Actor_Role` varchar(32) NOT NULL DEFAULT 'system',
+            `Action` varchar(128) NOT NULL,
+            `Target_Type` varchar(64) DEFAULT NULL,
+            `Target_ID` varchar(64) DEFAULT NULL,
+            `Details` text DEFAULT NULL,
+            `IP_Address` varchar(45) DEFAULT NULL,
+            `Created_At` timestamp NOT NULL DEFAULT current_timestamp(),
+            PRIMARY KEY (`Audit_ID`),
+            KEY `idx_audit_actor` (`Actor_ID`, `Actor_Role`),
+            KEY `idx_audit_action` (`Action`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
         // Seed 3-role defaults only if tables are completely empty (no standalone admin table)
         $ownerCount = $conn->query("SELECT COUNT(*) AS c FROM `owner`");
         if ($ownerCount && ($row = $ownerCount->fetch_assoc()) && (int)$row['c'] === 0) {
@@ -193,7 +223,7 @@ if (!function_exists('hw_get_db')) {
                 `Channel_Key` varchar(64) NOT NULL,
                 `Booking_ID` int(11) DEFAULT NULL,
                 `Schedule_ID` int(11) DEFAULT NULL,
-                `Sender_Role` enum('owner','vet_staff','head_vet','vet','admin','system') NOT NULL DEFAULT 'owner',
+                `Sender_Role` enum('owner','vet_staff','head_vet','system') NOT NULL DEFAULT 'owner',
                 `Sender_ID` int(11) DEFAULT NULL,
                 `Sender_Name` varchar(100) NOT NULL,
                 `Message_Text` text NOT NULL,
