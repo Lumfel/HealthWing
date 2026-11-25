@@ -24,8 +24,7 @@ if ($rel === '' || strpos($rel, '..') !== false || strpos($rel, "\0") !== false)
     exit('403 Forbidden');
 }
 
-$allowedPrefix = preg_match('#^(assets/css/|assets/js/|vendor/)#', $rel) === 1
-    || $rel === 'admin/dashboard.css';
+$allowedPrefix = preg_match('#^(assets/css/|assets/js/|vendor/)#', $rel) === 1;
 
 $ext = strtolower((string)pathinfo($rel, PATHINFO_EXTENSION));
 if (!$allowedPrefix || !in_array($ext, ['css', 'js'], true)) {

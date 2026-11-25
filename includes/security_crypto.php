@@ -156,8 +156,8 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     }
 
     /**
-     * Starts a persistent 90-day sliding PHP session in a dedicated directory and automatically
-     * restores + slides User, Veterinarian, and Admin logins from AES-256-GCM HttpOnly cookies.
+     * Starts a persistent 90-day sliding PHP session outside the webroot and automatically
+     * restores + slides Pet Owner, Staff Veterinarian, and Head Veterinarian logins from AES-256-GCM HttpOnly cookies.
      */
     function hw_start_secure_session(): void
     {
@@ -165,10 +165,15 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
 
         if (session_status() === PHP_SESSION_NONE) {
-            $sessDir = dirname(__DIR__) . '/rate_limit_data/sessions';
-            if (!is_dir($sessDir)) {
-                @mkdir($sessDir, 0750, true);
+            $outsideBase = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.healthwing_secrets';
+            $sessDir = $outsideBase . DIRECTORY_SEPARATOR . 'sessions';
+            if (!is_dir($outsideBase)) {
+                @mkdir($outsideBase, 0700, true);
             }
+            if (!is_dir($sessDir)) {
+                @mkdir($sessDir, 0700, true);
+            }
+            @chmod($sessDir, 0700);
             if (is_dir($sessDir) && is_writable($sessDir)) {
                 @session_save_path($sessDir);
             }
@@ -301,7 +306,7 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
     }
 
     /**
-     * Normalizes legacy and canonical role names to the strict 3-role model.
+     * Normalizes canonical role names to the strict 3-role model (owner, vet_staff, head_vet).
      */
     function hw_normalize_role(string $role): string
     {
@@ -314,7 +319,6 @@ if (!defined('HW_SECURITY_CRYPTO_LOADED')) {
             'vet' => 'vet_staff',
             'head_vet' => 'head_vet',
             'head vet' => 'head_vet',
-            'admin' => 'head_vet',
         ];
         return $map[$raw] ?? $raw;
     }

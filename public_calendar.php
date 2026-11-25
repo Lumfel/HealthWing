@@ -16,7 +16,6 @@ hw_start_secure_session();
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
     <title>Public Clinic Schedule & Availability | HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .cal-container { max-width: 1260px; margin: 28px auto 60px; padding: 0 20px; }

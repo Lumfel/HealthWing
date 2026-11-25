@@ -18,6 +18,10 @@ const ownerForm = document.getElementById('signupOwnerForm');
 if (ownerForm) {
     ownerForm.addEventListener('submit', function(event) {
         event.preventDefault();
+        const consentEl = document.getElementById('privacy_consent');
+        const privacyConsent = Boolean(consentEl && consentEl.checked);
+        const turnstileInput = ownerForm.querySelector('[name="cf-turnstile-response"]');
+        const csrfInput = ownerForm.querySelector('[name="csrf_token"]');
         const data = {
             first_name: document.getElementById('firstname').value.trim(),
             last_name: document.getElementById('lastname').value.trim(),
@@ -29,14 +33,24 @@ if (ownerForm) {
             age: document.getElementById('age').value.trim(),
             address: document.getElementById('address').value.trim(),
             contact: document.getElementById('contact').value.trim(),
+            privacy_consent: privacyConsent,
+            cf_turnstile_response: turnstileInput ? turnstileInput.value : '',
+            csrf_token: csrfInput ? csrfInput.value : ''
         };
         if (data.password !== data.confirmPassword) {
             alert('Passwords do not match.');
             return;
         }
+        if (!privacyConsent) {
+            alert('You must agree to the Data Privacy Notice (RA 10173) before signing up.');
+            return;
+        }
         fetch('signup.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': data.csrf_token
+            },
             body: JSON.stringify(data)
         })
         .then(res => res.json())
@@ -60,6 +74,10 @@ const vetForm = document.getElementById('signupVetForm');
 if (vetForm) {
     vetForm.addEventListener('submit', function(event) {
         event.preventDefault();
+        const consentEl = document.getElementById('privacy_consent');
+        const privacyConsent = Boolean(consentEl && consentEl.checked);
+        const turnstileInput = vetForm.querySelector('[name="cf-turnstile-response"]');
+        const csrfInput = vetForm.querySelector('[name="csrf_token"]');
         const data = {
             first_name: document.getElementById('firstname').value.trim(),
             last_name: document.getElementById('lastname').value.trim(),
@@ -72,15 +90,25 @@ if (vetForm) {
             address: document.getElementById('address') ? document.getElementById('address').value.trim() : '',
             contact: document.getElementById('contact') ? document.getElementById('contact').value.trim() : '',
             specialties: document.getElementById('specialties') ? document.getElementById('specialties').value.trim() : '',
-            prc_license_no: document.getElementById('prc_license_no') ? document.getElementById('prc_license_no').value.trim() : ''
+            prc_license_no: document.getElementById('prc_license_no') ? document.getElementById('prc_license_no').value.trim() : '',
+            privacy_consent: privacyConsent,
+            cf_turnstile_response: turnstileInput ? turnstileInput.value : '',
+            csrf_token: csrfInput ? csrfInput.value : ''
         };
         if (data.password !== data.confirmPassword) {
             alert('Passwords do not match.');
             return;
         }
+        if (!privacyConsent) {
+            alert('You must agree to the Data Privacy Notice (RA 10173) before signing up.');
+            return;
+        }
         fetch('signup.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': data.csrf_token
+            },
             body: JSON.stringify(data)
         })
         .then(res => res.json())

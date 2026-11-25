@@ -42,7 +42,18 @@ function rate_limit_check(string $action, int $maxRequests, int $windowSeconds):
     if ($fp === false) {
         return;
     }
-    flock($fp, LOCK_EX);
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        http_response_code(503);
+        header('Content-Type: application/json');
+        header('Retry-After: 1');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Service temporarily busy. Please try again shortly.',
+            'retry_after' => 1,
+        ]);
+        exit();
+    }
 
     $contents = stream_get_contents($fp);
     if ($contents) {

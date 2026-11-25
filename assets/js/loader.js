@@ -72,7 +72,7 @@
         return html;
     }
 
-    /** Generates skeleton emergency case cards for Admin Emergency Requests */
+    /** Generates skeleton emergency case cards */
     function caseCards(count = 4) {
         let html = '';
         for (let i = 0; i < count; i++) {
@@ -185,7 +185,8 @@
             const opts = Object.assign({}, init || {});
             const method = String(opts.method || (input && input.method) || 'GET').toUpperCase();
             if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-                const csrfMeta = document.querySelector('meta[name="hw-csrf-token"]');
+                const csrfMeta = document.querySelector('meta[name="hw-csrf-token"]')
+                    || document.querySelector('meta[name="csrf-token"]');
                 const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
                 if (csrfToken) {
                     if (opts.headers instanceof Headers) {

@@ -9,7 +9,7 @@
     const CHAT_POLL_MS = 2500;
     const RING_TIMEOUT_MS = 45000;
 
-    let myRole = null; // 'owner'| 'vet'| 'admin'
+    let myRole = null; // 'owner' | 'vet_staff' | 'head_vet'
     let myActor = null;
     let myWsToken = null;
     const watched = new Map(); // bookingId ->label
@@ -39,10 +39,6 @@
     let typingTimeout = null;
 
     function apiPath(relPath) {
-        const isInAdmin = window.location.pathname.indexOf('/admin/') !== -1;
-        if (isInAdmin && !relPath.startsWith('../') && !relPath.startsWith('/')) {
-            return '../'+ relPath;
-        }
         return relPath;
     }
 

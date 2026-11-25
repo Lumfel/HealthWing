@@ -199,7 +199,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Appointment Scheduled | HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet">
-    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet">
 </head>
 <body style="background:#F4F9FA;min-height:100vh;font-family:system-ui,-apple-system,sans-serif;">
 <?php include __DIR__ . '/includes/navbar.php'; ?>

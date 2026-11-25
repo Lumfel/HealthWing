@@ -4,11 +4,7 @@ require_once __DIR__ . '/includes/turnstile.php';
 hw_start_secure_session();
 
 if (isset($_SESSION['username']) && !empty($_SESSION['username'])) {
-    if (hw_is_head_vet()) {
-        header('Location: admin/ADMIN_VET_1.php');
-        exit;
-    }
-    if (hw_is_vet_staff()) {
+    if (hw_is_vet_role()) {
         header('Location: vetindex.php');
         exit;
     }

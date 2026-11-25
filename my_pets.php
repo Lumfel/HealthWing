@@ -35,8 +35,8 @@ if (!$ownerId) {
     <meta name="viewport" content=" width=device-width, initial-scale=1.0">
     <title>My Pets · HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
+        :root { --bg: #F4F9FA; --surface: #FFFFFF; --border: #E3EBEC; }
         body { background: var(--bg); font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .pet-card {
             background: var(--surface);

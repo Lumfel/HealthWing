@@ -11,9 +11,20 @@ header("Content-Type: application/json");
 hw_require_csrf();
 
 $data = json_decode(file_get_contents("php://input"), true);
+if (!is_array($data)) {
+    $data = $_POST;
+}
 
 if (!isset($data["first_name"], $data["last_name"], $data["email"], $data["username"], $data["password"], $data["role"])) {
+    http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Missing required fields"]);
+    exit();
+}
+
+$privacyConsent = filter_var($data['privacy_consent'] ?? false, FILTER_VALIDATE_BOOLEAN);
+if (!$privacyConsent) {
+    http_response_code(400);
+    echo json_encode(["status" => "error", "message" => "Informed consent under the Data Privacy Act (RA 10173) is required to register."]);
     exit();
 }
 
@@ -118,6 +129,16 @@ try {
         $stmt->close();
         $connect->commit();
         $txStarted = false;
+
+        // Record RA 10173 informed consent after account creation
+        hw_log_consent(
+            $connect,
+            $insertId,
+            $role,
+            'registration_privacy_consent_ra10173',
+            $role === 'owner' ? 'owner_registration' : 'vet_registration',
+            (string)$insertId
+        );
 
         if ($role === 'owner') {
             session_regenerate_id(true);

@@ -61,9 +61,7 @@ document.addEventListener("DOMContentLoaded", function () {
                             }
                         } catch (e) {}
 
-                        if (response.role === "head_vet") {
-                            window.location.replace("admin/ADMIN_VET_1.php");
-                        } else if (response.role === "vet_staff" || response.role === "Veterinarian") {
+                        if (response.role === "head_vet" || response.role === "vet_staff" || response.role === "Veterinarian") {
                             window.location.replace("vetindex.php");
                         } else {
                             window.location.replace("index.php");

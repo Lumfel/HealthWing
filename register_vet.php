@@ -56,6 +56,17 @@ $csrfToken = hw_csrf_token();
                 <label for="prc_license_no" class="block text-gray-700 font-medium">PRC License Number</label>
                 <input type="text" id="prc_license_no" name="prc_license_no" placeholder="e.g., PRC-VET-005412" required />
 
+                <div style="margin: 12px 0; padding: 10px 12px; background: #F4F9FA; border: 1px solid #D5E3E6; border-radius: 8px; font-size: 12.5px; color: #2B454A; text-align: left;">
+                    <div style="font-weight: 700; margin-bottom: 4px; color: #1F3A3D;">Data Privacy Notice (RA 10173)</div>
+                    <p style="margin: 0 0 8px 0; line-height: 1.45;">
+                        HealthWing collects your personal details, clinical specialties, and PRC License Number solely for clinician credential verification, clinical accountability, and veterinary record auditing under the Philippine Data Privacy Act of 2012 (RA 10173). All clinical actions are logged for patient safety and regulatory compliance.
+                    </p>
+                    <label for="privacy_consent" style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="privacy_consent" name="privacy_consent" value="1" required style="margin-top: 2px; width: auto;" />
+                        <span>I have read the Data Privacy Notice and give my informed consent to the processing of my clinician account and PRC credential data under RA 10173.</span>
+                    </label>
+                </div>
+
                 <div style="margin: 10px 0; display: flex; justify-content: center;">
                     <?php echo hw_turnstile_render_widget('signup'); ?>
                 </div>

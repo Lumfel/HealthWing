@@ -12,4 +12,3 @@ pet_photos/
 .env
 .env.*
 node_modules/
-admin/cache_dashboard_data.json

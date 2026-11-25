@@ -10,6 +10,12 @@ Options -Indexes
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HW_HTTPS
 </IfModule>
 
+# Defense-in-depth denial of VCS and sensitive internal directories even if mod_rewrite is disabled
+<IfModule mod_alias.c>
+    RedirectMatch 403 (?i)(^|/)\.git(/|$)
+    RedirectMatch 403 (?i)(^|/)(includes|database|archives|rate_limit_data|docs)(/|$)
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
@@ -44,7 +50,6 @@ Options -Indexes
     RewriteRule ^user/?$ owner_bookings.php [L,QSA]
     RewriteRule ^user/book/?$ appointment_schedule.php [L,QSA]
     RewriteRule ^vet/?$ vetindex.php [L,QSA]
-    RewriteRule ^admin/?$ admin/ADMIN_VET_1.php [L,QSA]
     RewriteRule ^signin/?$ login.php [L,QSA]
     RewriteRule ^signup/?$ register.php [L,QSA]
     RewriteRule ^choose-role/?$ choose_role.php [L,QSA]

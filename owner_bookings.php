@@ -80,7 +80,6 @@ $conn->close();
     <meta name="viewport" content=" width=device-width, initial-scale=1.0">
     <title>My Bookings & Live Triage | HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="api/asset_proxy.php?f=admin/dashboard.css">
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .owner-wrap { max-width: 1260px; margin: 28px auto 70px; padding: 0 20px; }
@@ -277,7 +276,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function cancelEmergency(bookingId, mode) {
     const confirmMsg = mode === 'direct'
         ? 'Cancel this emergency request?'
-        : 'Send a request to cancel this emergency request? A vet or admin will review it.';
+        : 'Send a request to cancel this emergency request? A clinic veterinarian will review it.';
     if (!confirm(confirmMsg)) return;
 
     fetch('cancel_emergency.php', {

@@ -7,7 +7,8 @@ if (php_sapi_name() !== 'cli') {
     header('Content-Type: application/json');
     echo json_encode([
         'service' => 'HealthWing WebSocket Hub',
-        'usage' => 'Run `php ws_server.php` in terminal or launch start_websocket.bat',
+        'usage' => 'Run `php ws_server.php` in terminal or launch start_websocket.bat behind a TLS reverse proxy (wss://)',
+        'default_host' => '127.0.0.1',
         'default_port' => 8080,
     ]);
     exit;
@@ -17,12 +18,16 @@ require_once __DIR__ . '/includes/security_crypto.php';
 // Ensure the shared master key can be loaded/created cleanly
 hw_get_master_key();
 
-$port = isset($argv[1]) ? (int)$argv[1] : 8080;
-$address = '0.0.0.0';
+$port = isset($argv[1]) ? (int)$argv[1] : (int)(getenv('HW_WS_PORT') ?: 8080);
+$envHost = getenv('HW_WS_BIND_HOST');
+if ($envHost === false || trim($envHost) === '') {
+    $envHost = getenv('WS_BIND_HOST');
+}
+$address = ($envHost !== false && trim($envHost) !== '') ? trim($envHost) : '127.0.0.1';
 
 $serverSocket = stream_socket_server("tcp://{$address}:{$port}", $errno, $errstr);
 if (!$serverSocket) {
-    fwrite(STDERR, "Failed to bind WebSocket server on port {$port}: {$errstr} ({$errno})\n");
+    fwrite(STDERR, "Failed to bind WebSocket server on {$address}:{$port}: {$errstr} ({$errno})\n");
     exit(1);
 }
 stream_set_blocking($serverSocket, false);

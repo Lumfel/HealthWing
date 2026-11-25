@@ -57,7 +57,6 @@ $prefillDate = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET
     <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
     <title>Smart Appointment Scheduling | HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .book-wrap { max-width: 860px; margin: 32px auto 70px; padding: 0 20px; }

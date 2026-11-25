@@ -15,6 +15,8 @@ SET time_zone = "+00:00";
 CREATE DATABASE IF NOT EXISTS `veterinarydb` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `veterinarydb`;
 
+DROP TABLE IF EXISTS `audit_log`;
+DROP TABLE IF EXISTS `consent_log`;
 DROP TABLE IF EXISTS `receipt_blocks`;
 DROP TABLE IF EXISTS `call_ice_candidate`;
 DROP TABLE IF EXISTS `call_session`;
@@ -355,6 +357,40 @@ CREATE TABLE `receipt_blocks` (
   KEY `idx_status` (`Status`),
   CONSTRAINT `receipt_blocks_ibfk_owner` FOREIGN KEY (`Owner_ID`) REFERENCES `owner` (`Owner_ID`) ON DELETE SET NULL,
   CONSTRAINT `receipt_blocks_ibfk_vet` FOREIGN KEY (`Attending_Vet_ID`) REFERENCES `veterinarian` (`Veterinarian_ID`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 13. Table: consent_log (RA 10173 Informed Consent Ledger)
+CREATE TABLE IF NOT EXISTS `consent_log` (
+  `Consent_ID` int(11) NOT NULL AUTO_INCREMENT,
+  `User_ID` int(11) DEFAULT NULL,
+  `Role` varchar(32) NOT NULL,
+  `Action` varchar(64) NOT NULL,
+  `Context_Type` varchar(64) DEFAULT NULL,
+  `Context_ID` varchar(64) DEFAULT NULL,
+  `IP_Address` varchar(45) DEFAULT NULL,
+  `User_Agent` varchar(255) DEFAULT NULL,
+  `Consented_At` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Consent_ID`),
+  KEY `idx_consent_user` (`User_ID`, `Role`),
+  KEY `idx_consent_action` (`Action`),
+  KEY `idx_consent_time` (`Consented_At`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 14. Table: audit_log (Clinical & Operational Accountability Ledger)
+CREATE TABLE IF NOT EXISTS `audit_log` (
+  `Audit_ID` int(11) NOT NULL AUTO_INCREMENT,
+  `Actor_ID` int(11) DEFAULT NULL,
+  `Actor_Role` varchar(32) NOT NULL,
+  `Action` varchar(128) NOT NULL,
+  `Target_Type` varchar(64) DEFAULT NULL,
+  `Target_ID` varchar(64) DEFAULT NULL,
+  `Details` text DEFAULT NULL,
+  `IP_Address` varchar(45) DEFAULT NULL,
+  `Created_At` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Audit_ID`),
+  KEY `idx_audit_actor` (`Actor_ID`, `Actor_Role`),
+  KEY `idx_audit_action` (`Action`),
+  KEY `idx_audit_created` (`Created_At`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

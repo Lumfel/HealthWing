@@ -6,7 +6,7 @@
  * 1. Live Priority-Ranked Emergency Triage Queue (with Composite Priority Score, Severity Override,
  *    Assigned Room/Vet, Conflict Preemption Rationale, and 1-Click Video/Audio/Chat).
  * 2. Smart Assigned & Clinic-Wide Appointments (showing assigned Vet, Room, Duration, and Auto-Scheduler controls).
- * 3. Direct Clinical Pet Records & Checkup/Prescription Logger (previously locked inside Admin only).
+ * 3. Direct Clinical Pet Records & Checkup/Prescription Logger.
  * 4. Real-Time Clinic Room Status Board.
  */
 require_once __DIR__ . '/includes/security_crypto.php';
@@ -21,6 +21,7 @@ if (!hw_is_vet_role()) {
 }
 
 $username = $_SESSION['username'];
+$csrfToken = hw_csrf_token();
 $conn = hw_get_db();
 $engine = new VetSchedulingEngine($conn);
 
@@ -79,13 +80,33 @@ $conn->close();
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content=" width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>"/>
+    <meta name="hw-csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>"/>
     <title>Veterinarian Clinical Workstation | HealthWing</title>
     <link href="api/asset_proxy.php?f=vendor/tailwind/tailwind.min.css" rel="stylesheet"/>
-    <link href="api/asset_proxy.php?f=admin/dashboard.css" rel="stylesheet"/>
     <style>
         body { background: #F4F9FA; color: #16262A; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
         .vet-wrap { max-width: 1340px; margin: 24px auto 70px; padding: 0 20px; }
+        .panel { background: #FFFFFF; border: 1px solid #E3EBEC; border-radius: 14px; padding: 18px 20px; box-shadow: 0 4px 16px rgba(15,35,42,0.04); }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #E5EEF0; vertical-align: top; }
+        .data-table th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #546E73; background: #F8FCFD; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid transparent; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.15s; }
+        .btn-primary { background: #1F3A3D; color: #FFFFFF; }
+        .btn-primary:hover { background: #2B5054; }
+        .btn-secondary { background: #EEF5F7; color: #1F3A3D; border-color: #D5E3E6; }
+        .btn-secondary:hover { background: #E1EFF2; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+        .badge-good { background: #E6F4EA; color: #137333; }
+        .badge-warn { background: #FFF8E7; color: #8A5A00; }
+        .badge-bad { background: #FBE7EC; color: #9E1C38; }
+        .badge-neutral { background: #E7F3F7; color: #1F5B70; }
+        .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 12px; }
+        .room-card { background: #F9FCFD; border: 1px solid #D5E3E6; border-radius: 12px; padding: 14px; }
+        .room-name { font-weight: 800; font-size: 14px; color: #1F3A3D; margin-bottom: 4px; }
+        .empty { text-align: center; padding: 24px 12px; color: #62787B; font-size: 13.5px; }
         .tab-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 2px solid #E3EBEC; padding-bottom: 10px; }
         .tab-btn {
             padding: 10px 18px;
@@ -446,7 +467,7 @@ $conn->close();
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td colspan="8" class="empty">Loading clinical pet records...</td></tr>
+                        <tr><td colspan="8" class="empty">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -557,12 +578,64 @@ $conn->close();
 
 <script>
 const CURRENT_VET_ID = <?php echo (int)$currentVetId; ?>;
+const CURRENT_VET_ROLE = <?php echo json_encode(hw_session_role()); ?>;
 let vetPetsCache = [];
+const vetPetsMap = new Map();
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]')
+        || document.querySelector('meta[name="hw-csrf-token"]');
+    return meta ? (meta.getAttribute('content') || '') : '';
+}
+
+function buildCsrfHeaders(extra = {}) {
+    return Object.assign({ 'X-CSRF-Token': getCsrfToken() }, extra);
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     if (window.HWCall) {
         HWCall.init('vet');
     }
+
+    const petTbody = document.querySelector('#vetPetsTable tbody');
+    if (petTbody) {
+        petTbody.addEventListener('click', function (event) {
+            const btn = event.target.closest('button[data-action][data-pet-id]');
+            if (!btn) return;
+            const petId = Number(btn.dataset.petId);
+            if (!Number.isFinite(petId) || petId <= 0) return;
+            if (btn.dataset.action === 'checkup') {
+                openVetCheckupModal(petId);
+            } else if (btn.dataset.action === 'edit-pet') {
+                const petRecord = vetPetsMap.get(petId);
+                if (petRecord) {
+                    openVetEditPetModal(petRecord);
+                }
+            }
+        });
+    }
+
+    const roomGrid = document.getElementById('vetRoomGrid');
+    if (roomGrid) {
+        roomGrid.addEventListener('change', function (event) {
+            const select = event.target.closest('select[data-room-id]');
+            if (!select) return;
+            const roomId = Number(select.dataset.roomId);
+            if (Number.isFinite(roomId) && roomId > 0) {
+                updateVetRoomStatus(roomId, select.value);
+            }
+        });
+    }
+
     loadVetClinicalData();
     loadClientHistory();
 });
@@ -570,12 +643,12 @@ document.addEventListener('DOMContentLoaded', function () {
 function switchVetTab(tabName, btn) {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('vet-tab-'+ tabName).classList.add('active');
+    document.getElementById('vet-tab-' + tabName).classList.add('active');
     btn.classList.add('active');
 }
 
 async function rerunTriageEngine() {
-    if (window.HWBone) HWBone.showOverlay("Re-Evaluating Priority Triage Queue...", "Factoring clinical acuity, wait aging, and room/vet preemption");
+    if (window.HWBone) HWBone.showOverlay('Loading...', 'Evaluating emergency priority queue and room allocation');
     const res = await fetch('api/triage_engine.php?action=queue');
     const data = await res.json();
     if (data.success) {
@@ -589,8 +662,8 @@ async function rerunTriageEngine() {
 async function changeEmergencySeverity(bookingId, severityLevel) {
     const res = await fetch('api/triage_engine.php?action=set_severity', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ booking_id: bookingId, severity_level: severityLevel }),
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ booking_id: bookingId, severity_level: severityLevel, csrf_token: getCsrfToken() }),
     });
     const data = await res.json();
     if (data.success) {
@@ -599,17 +672,23 @@ async function changeEmergencySeverity(bookingId, severityLevel) {
         }
         window.location.reload();
     } else {
-        alert(data.error || 'Could not update severity.');
+        alert(data.error || data.message || 'Could not change severity.');
     }
 }
 
 async function autoAssignAllUnassigned() {
-    if (window.HWBone) HWBone.showOverlay("Running Automated Scheduler...", "Matching unassigned appointments to optimal Veterinarians & Rooms");
-    const res = await fetch('api/scheduler.php?action=auto_assign_all', { method: 'POST'});
+    if (window.HWBone) HWBone.showOverlay('Loading...', 'Matching unassigned appointments to available veterinarians and rooms');
+    const res = await fetch('api/scheduler.php?action=auto_assign_all', {
+        method: 'POST',
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ csrf_token: getCsrfToken() }),
+    });
     const data = await res.json();
     if (data.success) {
-        alert(`Auto-assigned ${data.updated_count} appointment(s) to optimal Veterinarians and Rooms.`);
+        alert(`Auto-assigned ${data.updated_count} appointment(s) to available Veterinarians and Rooms.`);
         window.location.reload();
+    } else {
+        alert(data.error || data.message || 'Could not auto-assign appointments.');
     }
 }
 
@@ -618,7 +697,7 @@ async function updateStatus(event, bookingId) {
     const newStatus = document.getElementById(`status-select-${bookingId}`).value;
     let reason = '';
     if (newStatus === 'Cancelled') {
-        reason = prompt('Please provide a clinical/administrative reason for cancelling this emergency request:');
+        reason = prompt('Please provide a clinical reason for cancelling this emergency request:');
         if (reason === null) return;
         if (reason.trim() === '') {
             alert('A cancellation reason is required.');
@@ -627,14 +706,14 @@ async function updateStatus(event, bookingId) {
     }
     const res = await fetch('update_status.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ booking_id: bookingId, status: newStatus, reason }),
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ booking_id: bookingId, status: newStatus, reason, csrf_token: getCsrfToken() }),
     });
     const result = await res.json();
     if (result.success) {
         window.location.reload();
     } else {
-        alert(result.message || 'Failed to update status.');
+        alert(result.message || result.error || 'Failed to save status.');
     }
 }
 
@@ -645,13 +724,13 @@ async function toggleCallFeature(checkbox) {
     try {
         const res = await fetch('toggle_call_feature.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json'},
-            body: JSON.stringify({ booking_id: bookingId, enabled }),
+            headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ booking_id: bookingId, enabled, csrf_token: getCsrfToken() }),
         });
         const data = await res.json();
         if (!data.success) {
             checkbox.checked = !enabled;
-            alert(data.message || 'Could not toggle call feature.');
+            alert(data.message || data.error || 'Could not toggle call feature.');
         }
     } catch (e) {
         checkbox.checked = !enabled;
@@ -665,14 +744,14 @@ async function updateSchedStatus(event, scheduleId) {
     const newStatus = document.getElementById(`sched-status-select-${scheduleId}`).value;
     const res = await fetch('update_sched_status.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ schedule_id: scheduleId, status: newStatus }),
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ schedule_id: scheduleId, status: newStatus, csrf_token: getCsrfToken() }),
     });
     const data = await res.json();
     if (data.success) {
         window.location.reload();
     } else {
-        alert(data.message || 'Failed to update appointment status.');
+        alert(data.message || data.error || 'Failed to save appointment status.');
     }
 }
 
@@ -686,12 +765,12 @@ if (searchEmergencyInput && filterEmergencyStatus) {
 function filterEmergencies() {
     const q = (searchEmergencyInput.value || '').toLowerCase();
     const st = filterEmergencyStatus.value;
-    document.querySelectorAll('#booking-table-body tr').forEach(row =>{
+    document.querySelectorAll('#booking-table-body tr').forEach(row => {
         const text = row.textContent.toLowerCase();
         const rowStatus = (row.querySelector('.badge')?.textContent || '').trim();
         const matchQ = !q || text.includes(q);
         const matchSt = !st || rowStatus === st;
-        row.style.display = (matchQ && matchSt) ? '': 'none';
+        row.style.display = (matchQ && matchSt) ? '' : 'none';
     });
 }
 
@@ -706,81 +785,233 @@ function filterAppointments() {
     const q = (searchApptInput.value || '').toLowerCase();
     const st = filterApptStatus.value;
     const myOnly = document.getElementById('filter-my-vet-only')?.checked;
-    document.querySelectorAll('#schedule-table-body tr').forEach(row =>{
+    document.querySelectorAll('#schedule-table-body tr').forEach(row => {
         const text = row.textContent.toLowerCase();
         const rowStatus = (row.querySelector('[id^="sched-status-"]')?.textContent || '').trim();
         const rowVetId = Number(row.getAttribute('data-vet-id') || 0);
         const matchQ = !q || text.includes(q);
         const matchSt = !st || rowStatus === st;
-        const matchVet = !myOnly || (CURRENT_VET_ID >0 && rowVetId === CURRENT_VET_ID);
-        row.style.display = (matchQ && matchSt && matchVet) ? '': 'none';
+        const matchVet = !myOnly || (CURRENT_VET_ID > 0 && rowVetId === CURRENT_VET_ID);
+        row.style.display = (matchQ && matchSt && matchVet) ? '' : 'none';
     });
 }
 
-// Load Clinical Pets & Rooms for Vet
+function createEmptyRow(colSpan, text) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = colSpan;
+    td.className = 'empty';
+    td.textContent = text;
+    tr.appendChild(td);
+    return tr;
+}
+
+// Load Clinical Pets & Rooms for Vet (safe DOM construction; no raw DB HTML interpolation)
 async function loadVetClinicalData() {
     if (window.HWBone) {
-        const pt = document.querySelector("#vetPetsTable tbody");
+        const pt = document.querySelector('#vetPetsTable tbody');
         if (pt) pt.innerHTML = HWBone.tableRows(8, 4);
-        const rg = document.getElementById("vetRoomGrid");
+        const rg = document.getElementById('vetRoomGrid');
         if (rg && !rg.children.length) rg.innerHTML = HWBone.roomCards(5);
     }
     const res = await fetch('api/vet_api.php?action=clinical_overview');
     const data = await res.json();
     if (!data.success) return;
 
-    vetPetsCache = data.pets || [];
+    vetPetsCache = Array.isArray(data.pets) ? data.pets : [];
+    vetPetsMap.clear();
+    vetPetsCache.forEach(p => {
+        const numericId = Number(p.Pet_ID);
+        if (Number.isFinite(numericId) && numericId > 0) {
+            vetPetsMap.set(numericId, p);
+        }
+    });
+
     const petTbody = document.querySelector('#vetPetsTable tbody');
-    if (vetPetsCache.length === 0) {
-        petTbody.innerHTML = `<tr><td colspan="8" class="empty">No pets registered yet.</td></tr>`;
-    } else {
-        petTbody.innerHTML = vetPetsCache.map(p =>`
-            <tr>
-                <td><strong>#${p.Pet_ID} ${p.Pet_Name}</strong></td>
-                <td>${p.OwnerFirstName ? p.OwnerFirstName + ''+ p.OwnerLastName : '—'}<br><span style="font-size:11px;color:#62787B;">${p.OwnerPhone || ''}</span></td>
-                <td>${p.Species || p.Pet_Type || 'Unknown'} · ${p.Age ? p.Age + 'y': '—'}</td>
-                <td><span style="color:${p.Current_Ailment ? '#D8546F': '#4CAF7D'};font-weight:600;">${p.Current_Ailment || 'Healthy / None'}</span></td>
-                <td>${p.Current_Medications || 'None'}</td>
-                <td>${p.Past_Conditions || 'None'}</td>
-                <td>${p.CheckupCount || 0} <span style="font-size:11px;color:#62787B;">(Last: ${p.LastCheckup || 'Never'})</span></td>
-                <td>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <button class="btn btn-primary btn-sm" onclick="openVetCheckupModal(${p.Pet_ID})">+ Checkup / Rx</button>
-                        <button class="btn btn-secondary btn-sm" onclick='openVetEditPetModal(${JSON.stringify(p)})'>Edit Chart</button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+    if (petTbody) {
+        petTbody.replaceChildren();
+        if (vetPetsCache.length === 0) {
+            petTbody.appendChild(createEmptyRow(8, 'No pets registered yet.'));
+        } else {
+            const frag = document.createDocumentFragment();
+            vetPetsCache.forEach(p => {
+                const petId = Number(p.Pet_ID);
+                const tr = document.createElement('tr');
+
+                // Col 1: Pet ID & Name
+                const tdPet = document.createElement('td');
+                const petStrong = document.createElement('strong');
+                petStrong.textContent = `#${petId} ${p.Pet_Name || 'Unnamed Pet'}`;
+                tdPet.appendChild(petStrong);
+                tr.appendChild(tdPet);
+
+                // Col 2: Owner & Phone
+                const tdOwner = document.createElement('td');
+                const ownerFull = [p.OwnerFirstName || '', p.OwnerLastName || ''].join(' ').trim();
+                tdOwner.appendChild(document.createTextNode(ownerFull || '—'));
+                tdOwner.appendChild(document.createElement('br'));
+                const phoneSpan = document.createElement('span');
+                phoneSpan.style.fontSize = '11px';
+                phoneSpan.style.color = '#62787B';
+                phoneSpan.textContent = p.OwnerPhone || '';
+                tdOwner.appendChild(phoneSpan);
+                tr.appendChild(tdOwner);
+
+                // Col 3: Species / Age
+                const tdSpecies = document.createElement('td');
+                const speciesLabel = p.Species || p.Pet_Type || 'Unknown';
+                const ageLabel = (p.Age !== null && p.Age !== undefined && p.Age !== '') ? `${p.Age}y` : '—';
+                tdSpecies.textContent = `${speciesLabel} · ${ageLabel}`;
+                tr.appendChild(tdSpecies);
+
+                // Col 4: Current Ailment
+                const tdAilment = document.createElement('td');
+                const ailmentSpan = document.createElement('span');
+                ailmentSpan.style.color = p.Current_Ailment ? '#D8546F' : '#4CAF7D';
+                ailmentSpan.style.fontWeight = '600';
+                ailmentSpan.textContent = p.Current_Ailment || 'Healthy / None';
+                tdAilment.appendChild(ailmentSpan);
+                tr.appendChild(tdAilment);
+
+                // Col 5: Active Medications
+                const tdMeds = document.createElement('td');
+                tdMeds.textContent = p.Current_Medications || 'None';
+                tr.appendChild(tdMeds);
+
+                // Col 6: Past Conditions
+                const tdPast = document.createElement('td');
+                tdPast.textContent = p.Past_Conditions || 'None';
+                tr.appendChild(tdPast);
+
+                // Col 7: Checkups
+                const tdCheckups = document.createElement('td');
+                tdCheckups.appendChild(document.createTextNode(`${Number(p.CheckupCount || 0)} `));
+                const lastSpan = document.createElement('span');
+                lastSpan.style.fontSize = '11px';
+                lastSpan.style.color = '#62787B';
+                lastSpan.textContent = `(Last: ${p.LastCheckup || 'Never'})`;
+                tdCheckups.appendChild(lastSpan);
+                tr.appendChild(tdCheckups);
+
+                // Col 8: Clinical Actions (delegated data-pet-id buttons)
+                const tdActions = document.createElement('td');
+                const btnWrap = document.createElement('div');
+                btnWrap.style.display = 'flex';
+                btnWrap.style.gap = '6px';
+                btnWrap.style.flexWrap = 'wrap';
+
+                const chkBtn = document.createElement('button');
+                chkBtn.type = 'button';
+                chkBtn.className = 'btn btn-primary btn-sm';
+                chkBtn.dataset.action = 'checkup';
+                chkBtn.dataset.petId = String(petId);
+                chkBtn.textContent = '+ Checkup / Rx';
+                btnWrap.appendChild(chkBtn);
+
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn btn-secondary btn-sm';
+                editBtn.dataset.action = 'edit-pet';
+                editBtn.dataset.petId = String(petId);
+                editBtn.textContent = 'Edit Chart';
+                btnWrap.appendChild(editBtn);
+
+                tdActions.appendChild(btnWrap);
+                tr.appendChild(tdActions);
+                frag.appendChild(tr);
+            });
+            petTbody.appendChild(frag);
+        }
     }
 
-    // Populate checkup pet selector
+    // Populate checkup pet selector safely via DOM
     const sel = document.getElementById('chkPetId');
-    sel.innerHTML = vetPetsCache.map(p =>
-        `<option value="${p.Pet_ID}">${p.Pet_Name} (${p.Species || p.Pet_Type || 'Pet'} — Owner: ${p.OwnerFirstName || 'Guest'})</option>`
-    ).join('');
+    if (sel) {
+        sel.replaceChildren();
+        const optFrag = document.createDocumentFragment();
+        vetPetsCache.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = String(Number(p.Pet_ID));
+            const ownerName = p.OwnerFirstName || 'Guest';
+            const species = p.Species || p.Pet_Type || 'Pet';
+            opt.textContent = `${p.Pet_Name || 'Unnamed Pet'} (${species} — Owner: ${ownerName})`;
+            optFrag.appendChild(opt);
+        });
+        sel.appendChild(optFrag);
+    }
 
-    // Render rooms
+    // Render clinic rooms safely via DOM
     const rGrid = document.getElementById('vetRoomGrid');
-    rGrid.innerHTML = (data.rooms || []).map(r =>{
-        const cls = r.Status === 'idle'? 'badge-good': (r.Status === 'ongoing'? 'badge-bad': 'badge-warn');
-        return `
-            <div class="room-card">
-                <div class="room-name">${r.Room_Name || 'Room #'+ r.Room_ID}</div>
-                <div style="font-size:12px;color:#62787B;margin-bottom:8px;">Type: ${r.Room_Type || 'General'}</div>
-                <div style="margin-bottom:10px;"><span class="badge ${cls}">${r.Status}</span></div>
-                <select onchange="updateVetRoomStatus(${r.Room_ID}, this.value)" style="width:100%;padding:7px;border:1px solid #C8D8DC;border-radius:6px;font-size:12.5px;">
-                    <option value="idle"${r.Status === 'idle'? 'selected': ''}>Idle (Available)</option>
-                    <option value="ongoing"${r.Status === 'ongoing'? 'selected': ''}>Ongoing (In Session)</option>
-                    <option value="booked"${r.Status === 'booked'? 'selected': ''}>Booked (Reserved)</option>
-                </select>
-            </div>
-        `;
-    }).join('');
+    if (rGrid) {
+        rGrid.replaceChildren();
+        const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+        if (rooms.length === 0) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'empty';
+            emptyDiv.textContent = 'No clinic rooms configured.';
+            rGrid.appendChild(emptyDiv);
+        } else {
+            const roomFrag = document.createDocumentFragment();
+            const allowedStatuses = [
+                { value: 'idle', label: 'Idle (Available)' },
+                { value: 'ongoing', label: 'Ongoing (In Session)' },
+                { value: 'booked', label: 'Booked (Reserved)' },
+            ];
+            rooms.forEach(r => {
+                const roomId = Number(r.Room_ID);
+                const status = String(r.Status || 'idle');
+                const cls = status === 'idle' ? 'badge-good' : (status === 'ongoing' ? 'badge-bad' : 'badge-warn');
+
+                const card = document.createElement('div');
+                card.className = 'room-card';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'room-name';
+                nameDiv.textContent = r.Room_Name || `Room #${roomId}`;
+                card.appendChild(nameDiv);
+
+                const typeDiv = document.createElement('div');
+                typeDiv.style.fontSize = '12px';
+                typeDiv.style.color = '#62787B';
+                typeDiv.style.marginBottom = '8px';
+                typeDiv.textContent = `Type: ${r.Room_Type || 'General'}`;
+                card.appendChild(typeDiv);
+
+                const badgeWrap = document.createElement('div');
+                badgeWrap.style.marginBottom = '10px';
+                const badge = document.createElement('span');
+                badge.className = `badge ${cls}`;
+                badge.textContent = status;
+                badgeWrap.appendChild(badge);
+                card.appendChild(badgeWrap);
+
+                const select = document.createElement('select');
+                select.dataset.roomId = String(roomId);
+                select.style.width = '100%';
+                select.style.padding = '7px';
+                select.style.border = '1px solid #C8D8DC';
+                select.style.borderRadius = '6px';
+                select.style.fontSize = '12.5px';
+
+                allowedStatuses.forEach(optDef => {
+                    const opt = document.createElement('option');
+                    opt.value = optDef.value;
+                    opt.textContent = optDef.label;
+                    opt.selected = (status === optDef.value);
+                    select.appendChild(opt);
+                });
+
+                card.appendChild(select);
+                roomFrag.appendChild(card);
+            });
+            rGrid.appendChild(roomFrag);
+        }
+    }
 }
 
 window.openVetCheckupModal = function(petId) {
     if (petId) {
-        document.getElementById('chkPetId').value = petId;
+        document.getElementById('chkPetId').value = String(Number(petId));
     }
     document.getElementById('vetCheckupModal').classList.add('open');
 };
@@ -798,10 +1029,11 @@ document.getElementById('vetCheckupForm').addEventListener('submit', async funct
         prescription: document.getElementById('chkPrescription').value,
         notes: document.getElementById('chkNotes').value,
         update_pet_record: document.getElementById('chkUpdateChart').checked,
+        csrf_token: getCsrfToken(),
     };
-    const res = await fetch('api/vet_api.php?action=add_checkup', {
+    const res = await fetch('api/vet_api.php?action=save_clinical_note', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
     });
     const data = await res.json();
@@ -811,7 +1043,7 @@ document.getElementById('vetCheckupForm').addEventListener('submit', async funct
         loadVetClinicalData();
         loadClientHistory();
     } else {
-        alert(data.error || 'Could not save checkup.');
+        alert(data.error || data.message || 'Could not save clinical checkup.');
     }
 });
 
@@ -835,47 +1067,81 @@ document.getElementById('vetEditPetForm').addEventListener('submit', async funct
         current_ailment: document.getElementById('editMedAilment').value,
         current_medications: document.getElementById('editMedMeds').value,
         past_conditions: document.getElementById('editMedPast').value,
+        csrf_token: getCsrfToken(),
     };
     const res = await fetch('api/vet_api.php?action=update_pet_medical', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (data.success) {
         document.getElementById('vetEditPetModal').classList.remove('open');
         loadVetClinicalData();
+    } else {
+        alert(data.error || data.message || 'Could not save medical record.');
     }
 });
 
 window.updateVetRoomStatus = async function(roomId, status) {
-    await fetch('api/vet_api.php?action=update_room', {
+    const res = await fetch('api/vet_api.php?action=update_room', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ room_id: roomId, status }),
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ room_id: roomId, status, csrf_token: getCsrfToken() }),
     });
+    const data = await res.json();
+    if (!data.success) {
+        alert(data.error || data.message || 'You do not have permission to change this room status.');
+    }
     loadVetClinicalData();
 };
 
 function loadClientHistory() {
     fetch('vet_client_history.php')
         .then(res => res.json())
-        .then(data =>{
+        .then(data => {
             const tbody = document.querySelector('#clientHistoryTable tbody');
-            if (!data.success || data.history.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty">No history recorded yet.</td></tr>';
+            if (!tbody) return;
+            tbody.replaceChildren();
+            const history = (data.success && Array.isArray(data.history)) ? data.history : [];
+            if (history.length === 0) {
+                tbody.appendChild(createEmptyRow(6, 'No history recorded yet.'));
                 return;
             }
-            tbody.innerHTML = data.history.map(h =>`
-                <tr>
-                    <td><span class="badge ${h.Type === 'Emergency'? 'badge-bad': 'badge-good'}">${h.Type}</span></td>
-                    <td>${h.OwnerFirst || ''} ${h.OwnerLast || ''}</td>
-                    <td>${h.PetName}</td>
-                    <td>${h.VetName}</td>
-                    <td>${h.EventDate}</td>
-                    <td>${h.Details || '—'}</td>
-                </tr>
-            `).join('');
+            const frag = document.createDocumentFragment();
+            history.forEach(h => {
+                const tr = document.createElement('tr');
+
+                const tdType = document.createElement('td');
+                const badge = document.createElement('span');
+                badge.className = `badge ${h.Type === 'Emergency' ? 'badge-bad' : 'badge-good'}`;
+                badge.textContent = h.Type || 'Record';
+                tdType.appendChild(badge);
+                tr.appendChild(tdType);
+
+                const tdClient = document.createElement('td');
+                tdClient.textContent = [h.OwnerFirst || '', h.OwnerLast || ''].join(' ').trim() || '—';
+                tr.appendChild(tdClient);
+
+                const tdPet = document.createElement('td');
+                tdPet.textContent = h.PetName || '—';
+                tr.appendChild(tdPet);
+
+                const tdVet = document.createElement('td');
+                tdVet.textContent = h.VetName || '—';
+                tr.appendChild(tdVet);
+
+                const tdDate = document.createElement('td');
+                tdDate.textContent = h.EventDate || '—';
+                tr.appendChild(tdDate);
+
+                const tdDetails = document.createElement('td');
+                tdDetails.textContent = h.Details || '—';
+                tr.appendChild(tdDetails);
+
+                frag.appendChild(tr);
+            });
+            tbody.appendChild(frag);
         });
 }
 </script>
