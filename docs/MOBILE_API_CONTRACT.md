@@ -392,16 +392,22 @@ Success response `201`:
     "pet_id": 1,
     "status": "Pending",
     "severity_level": "Urgent",
+    "assigned_room_id": 3,
+    "assigned_vet_id": 1,
+    "wait_minutes": 0.0,
     "triage": {
       "booking_id": 55,
       "queue_position": 1,
       "priority_score": 78.5,
       "severity_level": "Urgent",
+      "status": "In Progress",
+      "assigned_room_id": 3,
       "assigned_room_name": "Emergency Trauma Bay 1",
+      "assigned_vet_id": 1,
       "assigned_vet_name": "Dr. Camille Reyes",
       "rationale": "..."
     },
-    "preempted_schedules": []
+    "preempted_count": 0
   }
 }
 ```
@@ -437,6 +443,7 @@ Success response `200`:
     "block_index": 1,
     "receipt_code": "RCPT-...",
     "owner_id": 1,
+    "pet_id": 1,
     "reference_type": "schedule",
     "reference_id": 10,
     "service_summary": "Wellness Care",
@@ -459,10 +466,16 @@ Success response `200`:
     },
     "payload": {
       "receipt_code": "RCPT-...",
+      "owner_id": 1,
       "owner_name": "Jane Doe",
+      "pet_id": 1,
       "pet_name": "Mochi",
       "service_summary": "Wellness Care",
       "amount": 500.0,
+      "currency": "PHP",
+      "status": "ACTIVE",
+      "created_at": "2026-12-01 10:30:00",
+      "expires_at": "2027-12-01 10:30:00",
       "notes": "",
       "issued_by": "Dr. Camille Reyes"
     }
@@ -487,6 +500,13 @@ Returns clinical overview data for veterinarians.
 - Roles: `vet_staff`, `head_vet`
 
 Request JSON: none.
+
+Query parameters:
+
+| Parameter | Type | Required | Notes |
+|---|---|---:|---|
+| `search` | string | No | Filters returned pets and recent checkups. |
+| `limit` | integer | No | Default `50`, clamped between `1` and `100`. |
 
 Success response `200`:
 

@@ -63,7 +63,7 @@ try {
         ]);
     }
 
-    $vetStatus = (string)($vRow['Status'] ?? 'Approved');
+    $vetStatus = (string)($vRow['Status'] ?? '');
     if ($vetStatus !== 'Approved') {
         hw_mobile_json_response(403, [
             'success' => false,
@@ -77,16 +77,35 @@ try {
     $currentVetPrc = (string)($vRow['PRC_License_No'] ?? $currentVetPrc);
 
     if ($action === 'overview') {
-        $petsRes = $conn->query(
-            "SELECT p.*, o.First_Name AS OwnerFirstName, o.Last_Name AS OwnerLastName, o.Contact AS OwnerPhone,
-                    (SELECT COUNT(*) FROM pet_checkup c WHERE c.Pet_ID = p.Pet_ID) AS CheckupCount,
-                    (SELECT MAX(c.Checkup_Date) FROM pet_checkup c WHERE c.Pet_ID = p.Pet_ID) AS LastCheckup
-             FROM pet p
-             LEFT JOIN owner o ON p.Owner_ID = o.Owner_ID
-             WHERE p.Deleted_At IS NULL
-             ORDER BY p.Pet_ID DESC"
-        );
+        $search = trim((string)($_GET['search'] ?? ''));
+        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+        if ($limit < 1) {
+            $limit = 1;
+        } elseif ($limit > 100) {
+            $limit = 100;
+        }
+
+        $petSql = "SELECT p.*, o.First_Name AS OwnerFirstName, o.Last_Name AS OwnerLastName, o.Contact AS OwnerPhone,
+                          (SELECT COUNT(*) FROM pet_checkup c WHERE c.Pet_ID = p.Pet_ID) AS CheckupCount,
+                          (SELECT MAX(c.Checkup_Date) FROM pet_checkup c WHERE c.Pet_ID = p.Pet_ID) AS LastCheckup
+                   FROM pet p
+                   LEFT JOIN owner o ON p.Owner_ID = o.Owner_ID
+                   WHERE p.Deleted_At IS NULL";
+        if ($search !== '') {
+            $petSql .= " AND (p.Pet_Name LIKE ? OR o.First_Name LIKE ? OR o.Last_Name LIKE ?)";
+        }
+        $petSql .= " ORDER BY p.Pet_ID DESC LIMIT ?";
+        $petsStmt = $conn->prepare($petSql);
+        if ($search !== '') {
+            $searchPattern = '%' . $search . '%';
+            $petsStmt->bind_param('sssi', $searchPattern, $searchPattern, $searchPattern, $limit);
+        } else {
+            $petsStmt->bind_param('i', $limit);
+        }
+        $petsStmt->execute();
+        $petsRes = $petsStmt->get_result();
         $pets = $petsRes ? $petsRes->fetch_all(MYSQLI_ASSOC) : [];
+        $petsStmt->close();
 
         foreach ($pets as &$p) {
             foreach (['Description', 'Past_Conditions', 'Current_Ailment', 'Current_Medications'] as $field) {
@@ -100,15 +119,25 @@ try {
         $roomsRes = $conn->query("SELECT * FROM room ORDER BY Room_ID ASC");
         $rooms = $roomsRes ? $roomsRes->fetch_all(MYSQLI_ASSOC) : [];
 
-        $checkupsRes = $conn->query(
-            "SELECT c.*, p.Pet_Name, v.First_Name AS VetFirst, v.Last_Name AS VetLast
-             FROM pet_checkup c
-             JOIN pet p ON c.Pet_ID = p.Pet_ID
-             LEFT JOIN veterinarian v ON c.Veterinarian_ID = v.Veterinarian_ID
-             ORDER BY c.Checkup_Date DESC, c.Checkup_ID DESC
-             LIMIT 100"
-        );
+        $checkupSql = "SELECT c.*, p.Pet_Name, v.First_Name AS VetFirst, v.Last_Name AS VetLast
+                       FROM pet_checkup c
+                       JOIN pet p ON c.Pet_ID = p.Pet_ID
+                       LEFT JOIN veterinarian v ON c.Veterinarian_ID = v.Veterinarian_ID";
+        if ($search !== '') {
+            $checkupSql .= " WHERE (p.Pet_Name LIKE ? OR c.Diagnosis LIKE ? OR c.Prescription LIKE ? OR c.Notes LIKE ?)";
+        }
+        $checkupSql .= " ORDER BY c.Checkup_Date DESC, c.Checkup_ID DESC LIMIT ?";
+        $checkupsStmt = $conn->prepare($checkupSql);
+        if ($search !== '') {
+            $searchPattern = '%' . $search . '%';
+            $checkupsStmt->bind_param('ssssi', $searchPattern, $searchPattern, $searchPattern, $searchPattern, $limit);
+        } else {
+            $checkupsStmt->bind_param('i', $limit);
+        }
+        $checkupsStmt->execute();
+        $checkupsRes = $checkupsStmt->get_result();
         $checkups = $checkupsRes ? $checkupsRes->fetch_all(MYSQLI_ASSOC) : [];
+        $checkupsStmt->close();
         foreach ($checkups as &$c) {
             foreach (['Diagnosis', 'Prescription', 'Notes'] as $f) {
                 if (!empty($c[$f])) {

@@ -21,3 +21,6 @@
   Changed files: `api/mobile/booking.php`, `api/mobile/auth.php`, `docs/AI_SHARED_MEMORY.md`.
   Hardening: `booking.php?action=emergency` now enforces `rate_limit_check('mobile_emergency', 5, 300)` and, when `pet_id` is provided, verifies pet ownership via `SELECT Pet_ID FROM pet WHERE Pet_ID = ? AND Owner_ID = ? AND Deleted_At IS NULL LIMIT 1`, returning HTTP 403 `forbidden_pet` when the pet is not owned by the authenticated owner; `auth.php` veterinarian login now uses a strict status allowlist (`$vetStatus !== 'Approved'`), no longer defaulting NULL/unknown status to approved, and returns 403 for non-approved accounts.
   Verification: `php -l` passed for `api/mobile/booking.php` and `api/mobile/auth.php`; no commit made.
+- [2026-11-28] Copilot Fusion completed targeted mobile polish and backend re-audit.
+- Verification: `php -l` passed for 63 PHP files across `api/mobile/`, `includes/`, and root entrypoints with 0 errors.
+- Audit: Owner guards are present across owner endpoints; no admin references, CORS wildcards, hardcoded secrets, emojis, or remaining NULL-to-Approved defaults were found in the six mobile API files.

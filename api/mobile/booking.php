@@ -361,10 +361,21 @@ if ($action === 'emergency') {
                 'booking_id' => $bookingId,
                 'owner_id' => $ownerId,
                 'pet_id' => $petId,
-                'status' => 'Pending',
+                'status' => (string)($myAllocation['status'] ?? 'Pending'),
                 'severity_level' => $explicitSeverity,
+                'assigned_room_id' => $myAllocation !== null && $myAllocation['assigned_room_id'] !== null
+                    ? (int)$myAllocation['assigned_room_id']
+                    : null,
+                'assigned_vet_id' => $myAllocation !== null && $myAllocation['assigned_vet_id'] !== null
+                    ? (int)$myAllocation['assigned_vet_id']
+                    : null,
+                'wait_minutes' => $myAllocation !== null
+                    ? (float)($myAllocation['wait_minutes'] ?? max(0, ((int)$myAllocation['queue_position'] - 1) * 30))
+                    : 0.0,
                 'triage' => $myAllocation,
-                'preempted_schedules' => $triageResult['preempted_schedules'] ?? [],
+                'preempted_count' => count(is_array($triageResult['preempted_schedules'] ?? null)
+                    ? $triageResult['preempted_schedules']
+                    : []),
             ],
         ]);
     } catch (Throwable $e) {

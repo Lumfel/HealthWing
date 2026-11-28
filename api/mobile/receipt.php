@@ -92,6 +92,15 @@ try {
         ]);
     }
 
+    $payload['owner_id'] = $row['Owner_ID'] !== null ? (int)$row['Owner_ID'] : null;
+    $payload['pet_id'] = array_key_exists('pet_id', $payload) && $payload['pet_id'] !== null
+        ? (int)$payload['pet_id']
+        : null;
+    $payload['currency'] = (string)$row['Currency'];
+    $payload['status'] = (string)$row['Status'];
+    $payload['created_at'] = (string)$row['Created_At'];
+    $payload['expires_at'] = (string)$row['Expires_At'];
+
     $recomputedMerkle = hw_receipt_compute_merkle_root(hw_receipt_build_leaves($payload));
     $recomputedHash = hash('sha256', implode('|', [
         (int)$row['Block_Index'],
@@ -124,6 +133,9 @@ try {
             'block_index' => (int)$row['Block_Index'],
             'receipt_code' => $receiptCode,
             'owner_id' => $row['Owner_ID'] !== null ? (int)$row['Owner_ID'] : null,
+            'pet_id' => array_key_exists('pet_id', $payload) && $payload['pet_id'] !== null
+                ? (int)$payload['pet_id']
+                : null,
             'reference_type' => (string)$row['Reference_Type'],
             'reference_id' => $row['Reference_ID'] !== null ? (int)$row['Reference_ID'] : null,
             'service_summary' => (string)$row['Service_Summary'],
