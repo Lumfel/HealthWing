@@ -99,19 +99,19 @@ if ($action === 'login') {
                 ]);
             }
 
-            $vetStatus = (string)($vet['Status'] ?? 'Approved');
-            if ($vetStatus === 'Pending') {
+            $vetStatus = (string)($vet['Status'] ?? '');
+            if ($vetStatus !== 'Approved') {
+                if ($vetStatus === 'Pending') {
+                    hw_mobile_json_response(403, [
+                        'success' => false,
+                        'error' => 'account_pending',
+                        'message' => 'Your veterinarian account is awaiting Head Veterinarian approval.',
+                    ]);
+                }
                 hw_mobile_json_response(403, [
                     'success' => false,
-                    'error' => 'account_pending',
-                    'message' => 'Your veterinarian account is awaiting Head Veterinarian approval.',
-                ]);
-            }
-            if ($vetStatus === 'Rejected') {
-                hw_mobile_json_response(403, [
-                    'success' => false,
-                    'error' => 'account_rejected',
-                    'message' => 'Your signup request was declined. Please contact the clinic.',
+                    'error' => 'account_not_approved',
+                    'message' => 'Your veterinarian account is not approved for login. Please contact the clinic.',
                 ]);
             }
 

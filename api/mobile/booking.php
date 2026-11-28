@@ -228,7 +228,7 @@ if ($action === 'book') {
 }
 
 if ($action === 'emergency') {
-    rate_limit_check('mobile_emergency', 10, 300);
+    rate_limit_check('mobile_emergency', 5, 300);
     $data = hw_mobile_read_json();
 
     $details = trim((string)($data['details'] ?? ($data['additional_details'] ?? '')));
@@ -250,6 +250,22 @@ if ($action === 'emergency') {
             'error' => 'owner_not_found',
             'message' => 'Owner account not found.',
         ]);
+    }
+
+    if ($petId !== null) {
+        $petOwnerStmt = $conn->prepare('SELECT Pet_ID FROM pet WHERE Pet_ID = ? AND Owner_ID = ? AND Deleted_At IS NULL LIMIT 1');
+        $petOwnerStmt->bind_param('ii', $petId, $ownerId);
+        $petOwnerStmt->execute();
+        $ownedPet = $petOwnerStmt->get_result()->fetch_assoc();
+        $petOwnerStmt->close();
+        if (!$ownedPet) {
+            $conn->close();
+            hw_mobile_json_response(403, [
+                'success' => false,
+                'error' => 'forbidden_pet',
+                'message' => 'The selected pet does not belong to this owner account.',
+            ]);
+        }
     }
 
     $name = trim((string)$owner['First_Name'] . ' ' . (string)$owner['Last_Name']);
